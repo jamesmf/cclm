@@ -4,7 +4,7 @@
 
 ##### What are the goals of the project?
 
-1) Modularity: Fine-tuning BERT (or GPT, if you dare) is expensive. It should be easy to do custom pre-training, and no one should have to start with a billion parameters to get the benefit of pretrained models. With `cclm` you piece together what you need, and leave the other 900M paramters in the cloud.
+1) Modularity: Fine-tuning BERT (or GPT, if you dare) is expensive. It should be easy to do custom pre-training, and no one should have to start with a billion parameters to get the benefit of pretrained models. With `cclm` you piece together what you need, and leave the other 900M parameters in the cloud.
 
 2) Character-level input: Many corpora used in pretraining are clean and typo-free, but a lot of user-focused inputs aren't - leaving you at a disadvantage if your tokenization scheme isn't flexible enough. Using characters as input also makes it simple define many 'heads' of a model with the same input space.
 
