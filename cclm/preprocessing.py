@@ -1,9 +1,12 @@
 from tqdm import tqdm
 import numpy as np
+from tokenizers import BertWordPieceTokenizer
+from typing import List
 import json
 import os
 import re
 from collections import Counter
+from typing import Dict, List, Iterable
 
 PUNCT = '~!@#$%^&*()-+=_.,?":;' + "'"
 
@@ -11,35 +14,35 @@ PUNCT = '~!@#$%^&*()-+=_.,?":;' + "'"
 class Preprocessor:
     def __init__(
         self,
-        load_from=None,
-        vocab_size=10000,
-        max_example_len=128,
-        batch_size=16,
-        num_stopwords=250,
-        mask_output_len=4,
+        load_from: str = None,
+        vocab_size: int = 10000,
+        max_example_len: int = 128,
+        batch_size: int = 16,
+        num_stopwords: int = 250,
+        mask_output_len: int = 4,
     ):
-        self.char_dict = {}
-        self.char_rev = {}
-        self.token_dict = {}
-        self.token_rev = {}
+        self.char_dict: Dict[str, int] = {}
+        self.char_rev: Dict[int, str] = {}
+        self.token_dict: Dict[str, int] = {}
+        self.token_rev: Dict[str, int] = {}
         self.vocab_size = vocab_size
         self.max_example_len = max_example_len
         self.batch_size = batch_size
         self.num_stopwords = num_stopwords
         self.mask_output_len = mask_output_len
+        self.tokenizer = BertWordPieceTokenizer()
         if load_from:
             self._load(load_from)
 
-    def fit(self, data, min_char_freq=1, progbar=False):
+    def fit(self, data: List[str], min_char_freq: int = 1, progbar: bool = False):
         """
         Create a character-level dictionary based on a list of strings
         """
-        char_counter = Counter()
-        token_counter = Counter()
+        char_counter: Counter = Counter()
+        token_counter: Counter = Counter()
+        iterator_: Iterable = data
         if progbar:
             iterator_ = tqdm(data)
-        else:
-            iterator_ = data
         for example in iterator_:
             chars = Counter(example)
             split = self.tokenize(example)
@@ -87,11 +90,9 @@ class Preprocessor:
         token = re.sub("\d", "#", token)
         return token
 
-    def tokenize(self, string_to_tokenize):
+    def tokenize(self, string_to_tokenize: str) -> List[str]:
         string_to_tokenize = string_to_tokenize.lower().strip()
-        return [
-            tok.strip() for tok in string_to_tokenize.split(" ") if tok.strip() != ""
-        ]
+        return self.tokenizer.tokenize(string_to_tokenize)[0]
 
     def string_to_array(self, string_in, length, padding_pre=False):
         # truncate

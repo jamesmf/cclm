@@ -4,4 +4,4 @@ WORKDIR /app
 
 COPY . /app/cclm
 
-CMD pip install -e cclm
+RUN pip install -e cclm/
