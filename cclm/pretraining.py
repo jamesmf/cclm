@@ -2,35 +2,34 @@ import numpy as np
 import json
 import os
 
-# from tf.keras.callbacks import ModelCheckpoint
-# from keras.layers import (
-#     Input,
-#     SeparableConv1D,
-#     Conv1D,
-#     MaxPooling1D,
-#     Lambda,
-#     Multiply,
-#     Dropout,
-#     Dense,
-#     Embedding,
-#     Dot,
-#     Concatenate,
-#     Reshape,
-#     Add,
-#     Average,
-#     GlobalMaxPooling1D,
-#     GlobalMaxPooling2D,
-#     Permute,
-#     RepeatVector,
-#     Flatten,
-# )
-# from keras.layers.wrappers import TimeDistributed
-# from keras.regularizers import l1_l2
-# from keras.optimizers import Adam, RMSprop, SGD
-# from keras.models import Model, load_model
-# from keras.initializers import TruncatedNormal
-# from keras.constraints import MinMaxNorm
-# import keras.backend as K
+from tensorflow.keras.callbacks import ModelCheckpoint
+from tensorflow.keras.layers import (
+    Input,
+    SeparableConv1D,
+    Conv1D,
+    MaxPooling1D,
+    Lambda,
+    Multiply,
+    Dropout,
+    Dense,
+    Embedding,
+    Dot,
+    Concatenate,
+    Reshape,
+    Add,
+    Average,
+    GlobalMaxPooling1D,
+    GlobalMaxPooling2D,
+    Permute,
+    RepeatVector,
+    Flatten,
+)
+from tensorflow.keras.regularizers import l1_l2
+from tensorflow.keras.optimizers import Adam, RMSprop, SGD
+from tensorflow.keras.models import Model, load_model
+from tensorflow.keras.initializers import TruncatedNormal
+from tensorflow.keras.constraints import MinMaxNorm
+import tensorflow.keras.backend as K
 import tensorflow as tf
 from .models import CCLMModelBase
 
@@ -81,7 +80,10 @@ class MaskedLanguagePretrainer(Pretrainer):
         #         "preprocessor_args" in kwargs
         #     ), "Must pass proprocessor_args if not passing preprocessor"
         #     preprocessor = Preprocessor(**kwargs["preprocessor_args"])
-        self.preprocessor = kwargs["preprocessor"]
+        self.preprocessor = kwargs.get("preprocessor")
+        base = kwargs.get("base")
+        if base:
+            self.preprocessor = base.preprocessor
         super().__init__(*args, **kwargs)
 
     def add_core_layers(self):

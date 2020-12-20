@@ -20,6 +20,7 @@ class MLMPreprocessor:
         batch_size: int = 16,
         num_stopwords: int = 250,
         mask_output_len: int = 4,
+        tokenizer_path: str = "bert-base-uncased-vocab.txt",
     ):
         self.char_dict: Dict[str, int] = {}
         self.char_rev: Dict[int, str] = {}
@@ -30,7 +31,7 @@ class MLMPreprocessor:
         self.batch_size = batch_size
         self.num_stopwords = num_stopwords
         self.mask_output_len = mask_output_len
-        self.tokenizer = BertWordPieceTokenizer()
+        self.tokenizer = BertWordPieceTokenizer(tokenizer_path)
         if load_from:
             self._load(load_from)
 
@@ -92,7 +93,7 @@ class MLMPreprocessor:
 
     def tokenize(self, string_to_tokenize: str) -> List[str]:
         string_to_tokenize = string_to_tokenize.lower().strip()
-        return self.tokenizer.tokenize(string_to_tokenize)[0]
+        return self.tokenizer.encode(string_to_tokenize).tokens
 
     def string_to_array(self, string_in, length, padding_pre=False):
         # truncate
