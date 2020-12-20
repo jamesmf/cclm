@@ -18,7 +18,7 @@ setup(
     ],
     install_requires=[
         "tokenizers==0.9.2",
-        "datasets==1.1.2",
+        "datasets==1.1.3",
         "tensorflow-gpu==2.3.1",
         "numpy==1.18.5",
         "tqdm==4.49.0",

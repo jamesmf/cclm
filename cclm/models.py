@@ -1,7 +1,7 @@
 import numpy as np
 import json
 import os
-from .preprocessing import Preprocessor
+from .preprocessing import MLMPreprocessor
 import keras
 from keras.callbacks import ModelCheckpoint
 from keras.layers import Input, SeparableConv1D, Conv1D, MaxPooling1D, Lambda, Multiply

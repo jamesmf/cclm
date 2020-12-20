@@ -8,7 +8,7 @@ from collections import Counter
 PUNCT = '~!@#$%^&*()-+=_.,?":;' + "'"
 
 
-class Preprocessor:
+class MLMPreprocessor:
     def __init__(
         self,
         load_from=None,
@@ -178,7 +178,7 @@ class Preprocessor:
             "char_dict": self.char_dict,
             "max_example_len": self.max_example_len,
         }
-        with open(os.path.join(path, "ecle_config.json"), "w") as f:
+        with open(os.path.join(path, "cclm_config.json"), "w") as f:
             json.dump(config, f)
 
     def _load(self, path):
