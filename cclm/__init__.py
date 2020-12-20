@@ -1,2 +1,2 @@
 from .preprocessing import Preprocessor
-from .models import ECLEModelBase
+from .models import CCLMModelBase
