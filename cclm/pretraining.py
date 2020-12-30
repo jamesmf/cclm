@@ -2,36 +2,19 @@ import numpy as np
 import json
 import os
 
-from tensorflow.keras.callbacks import ModelCheckpoint
 from tensorflow.keras.layers import (
     Input,
-    SeparableConv1D,
     Conv1D,
-    MaxPooling1D,
-    Lambda,
     Multiply,
     Dropout,
     Dense,
-    Embedding,
-    Dot,
     Concatenate,
-    Reshape,
-    Add,
-    Average,
     GlobalMaxPooling1D,
-    GlobalMaxPooling2D,
     Permute,
-    RepeatVector,
-    Flatten,
 )
-from tensorflow.keras.regularizers import l1_l2
-from tensorflow.keras.optimizers import Adam, RMSprop, SGD
-from tensorflow.keras.models import Model, load_model
-from tensorflow.keras.initializers import TruncatedNormal
-from tensorflow.keras.constraints import MinMaxNorm
 import tensorflow.keras.backend as K
 import tensorflow as tf
-from .models import CCLMModelBase
+from .models import CCLMModelBase, TransformerBlock
 
 
 class Pretrainer:
@@ -45,28 +28,26 @@ class Pretrainer:
 
     def __init__(self, base=None, task_name="pretraining", base_args={}, **kwargs):
         self.transfer_layer_names = []
-        self.model = None
-        self.extra_inputs = []
-        self.extra_outputs = []
+        self.model = self.get_model()
         if base is None:
             base = CCLMModelBase(**base_args)
         self.base = base
         self.task_name = task_name
-        self.common_output = self.add_core_layers()
-        self.specific_output = self.add_task_specific_layers()
-        outputs = (
-            self.specific_output
-            if isinstance(self.specific_output, list)
-            else [self.specific_output]
-        )
-        print(self.base.embedder.input, self.extra_inputs)
-        print(outputs)
-        self.model = tf.keras.Model(
-            self.base.embedder.inputs + self.extra_inputs, outputs + self.extra_outputs
-        )
 
-    def fit(self):
+    def fit(self, *args, **kwargs):
+        """
+        This function should perform some form of optimization over a provided dataset.
+        Even though the task may involve many inputs and outputs, the result should
+        be that the .model gets fit such that it accets input from a `base` and
+        produces output that matches the shape of the input.
+        """
         raise NotImplementedError
+
+    def get_model(self, *args, **kwargs):
+        """
+        This should return a Model that accepts input with the shape of a `base` and
+        produces output of the same shape.
+        """
 
     def compile(self, *args, **kwargs):
         self.model.compile(*args, **kwargs)
@@ -74,67 +55,38 @@ class Pretrainer:
 
 class MaskedLanguagePretrainer(Pretrainer):
     def __init__(self, *args, **kwargs):
-        # preprocessor = kwargs.get("preprocessor", None)
-        # if preprocessor is None:
-        #     assert (
-        #         "preprocessor_args" in kwargs
-        #     ), "Must pass proprocessor_args if not passing preprocessor"
-        #     preprocessor = Preprocessor(**kwargs["preprocessor_args"])
         self.preprocessor = kwargs.get("preprocessor")
         base = kwargs.get("base")
         if base:
             self.preprocessor = base.preprocessor
         super().__init__(*args, **kwargs)
 
-    def add_core_layers(self):
+    def get_model(self, n_conv_filters: int = 128):
         """
-        Add a number of conv layers to go from a character level representation
-        to a deeper representation, then add attention heads over it. Use
-        dilation_rate to increase the ability of the model to increase in scope
+        Until handled better, inputs need to be padded to a multiple of filter_stride_len
         """
-        tn = self.task_name
-        ln = f"{tn}_core_c1"
+        ln = f"mlm_core_c1"
         self.transfer_layer_names.append(ln)
-        new_conv = Conv1D(
-            128, 3, padding="same", activation="tanh", name=ln, dilation_rate=2
-        )(self.base.embedder.output)
-        new_conv = Dropout(0.25)(new_conv)
-        # add attention heads
-        n_attention_heads = 4
-        new_conv_shape = int(new_conv.shape[1])
-        att_heads = []
+        # reduce the size, transformer, upsample
+        filter_stride_len = 4
+        model = tf.keras.Sequential(
+            [
+                Conv1D(
+                    n_conv_filters,
+                    filter_stride_len,
+                    padding="same",
+                    activation="tanh",
+                ),
+                Conv1D(
+                    n_conv_filters,
+                    filter_stride_len,
+                    strides=filter_stride_len,
+                    padding="same",
+                    activation="tanh",
+                ),
+                TransformerBlock(embed_dim=n_conv_filters),
+                tf.keras.layers.UpSampling1D(size=filter_stride_len),
+            ]
+        )
 
-        for head_num in range(n_attention_heads):
-            att = Permute((2, 1))(new_conv)
-            ln = f"{tn}_core_att_{head_num}"
-            self.transfer_layer_names.append(ln)
-            att = Dense(new_conv_shape, activation="softmax", name=ln)(att)
-            att = Permute((2, 1))(att)
-            att_out = Multiply()([new_conv, att])
-            att_heads.append(att_out)
-        cat = Concatenate()(att_heads)
-
-        ln = f"{tn}_core_c2"
-        self.transfer_layer_names.append(ln)
-        conv_2 = Conv1D(
-            128, 3, padding="same", activation="relu", name=ln, dilation_rate=3
-        )(cat)
-        ln = f"{tn}_core_c3"
-        self.transfer_layer_names.append(ln)
-        conv_3 = Conv1D(
-            128, 3, padding="same", activation="relu", name=ln, dilation_rate=3
-        )(conv_2)
-        return conv_3
-
-    def add_task_specific_layers(self):
-        """
-        Take the representation we've learned and put a task-specific head on
-        it to do masked language modeling.
-        """
-        gmp = GlobalMaxPooling1D()(self.common_output)
-        d = Dense(
-            self.preprocessor.vocab_size,
-            activation="softmax",
-            name=f"{self.task_name}_final_dense",
-        )(gmp)
-        return d
+        return model

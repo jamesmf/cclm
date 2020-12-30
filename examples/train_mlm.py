@@ -21,3 +21,8 @@ prep.fit(dataset)
 
 base = CCLMModelBase(preprocessor=prep)
 pretrainer = MaskedLanguagePretrainer(base=base)
+
+# the pretrainer has enough now to do the necessary task, just need to implement .fit()
+x = prep.string_to_array(dataset[3], length=65).reshape(1, -1)
+x2 = pretrainer.base.embedder(x)
+x3 = pretrainer.model(x2)

@@ -2,50 +2,15 @@ import numpy as np
 import json
 import os
 from .preprocessing import MLMPreprocessor
-import keras
-from keras.callbacks import ModelCheckpoint
-from keras.layers import Input, SeparableConv1D, Conv1D, MaxPooling1D, Lambda, Multiply
-from keras.layers import (
-    Dropout,
-    Dense,
-    Embedding,
-    Dot,
-    Concatenate,
-    Reshape,
-    Add,
-    Average,
-)
-from keras.layers import (
-    GlobalMaxPooling1D,
-    GlobalMaxPooling2D,
-    Permute,
-    RepeatVector,
-    Flatten,
-)
-from keras.layers import BatchNormalization
-from keras.layers.wrappers import TimeDistributed
-from keras.regularizers import l1_l2
-from keras.optimizers import Adam, RMSprop, SGD
-from keras.models import Model, load_model
-from keras.initializers import TruncatedNormal
-from keras.constraints import MinMaxNorm
-import keras.backend as K
 import tensorflow as tf
 
-
-def clipped_bce(y_true, y_pred):
-    y_pred = K.clip(y_pred, 0.01, 0.9)
-    #     thresh = 0.2
-    bce = K.binary_crossentropy(y_true, y_pred)
-    #     m = cce - thresh
-    m = K.clip(bce, 0.01, 3.0)
-    return K.mean(m, axis=-1)
+DEFAULT_EMB_DIM = 128
 
 
 def zero_out_zero_embedding(model):
     emb_layers = [l for l in model.layers if l.name.find("embedding") > -1]
     for layer in model.layers:
-        if isinstance(layer, Embedding):
+        if isinstance(layer, tf.keras.layers.Embedding):
             print(f"zeroing out {layer.name}")
             w = layer.get_weights()
             w[0][0] = np.zeros_like(w[0][0])
@@ -53,74 +18,59 @@ def zero_out_zero_embedding(model):
 
 
 def get_character_embedder(max_len, char_emb_size, n_chars, filters, prefix):
-    emb_init = TruncatedNormal(mean=0.0001, stddev=0.2, seed=None)
-    con = MinMaxNorm(0.05, 1.0)
-    reg = l1_l2(0.0000001, 0.0000001)
-    inp = Input((max_len,), name=f"{prefix}_inp")
-    char_emb = Embedding(
+    inp = tf.keras.layers.Input((max_len,), name=f"{prefix}_inp")
+    char_emb = tf.keras.layers.Embedding(
         n_chars,
         char_emb_size,
-        embeddings_constraint=con,
-        embeddings_initializer=emb_init,
         name=f"{prefix}_embedding",
     )
-    char_conv_1 = Conv1D(
+    char_conv_1 = tf.keras.layers.Conv1D(
         filters,
         3,
         activation="relu",
         name=f"{prefix}_c1",
         padding="same",
-        kernel_constraint=con,
-        bias_constraint=con,
     )
-    char_conv_2 = Conv1D(
+    char_conv_2 = tf.keras.layers.Conv1D(
         filters,
         3,
         activation="relu",
         name=f"{prefix}_c2",
         padding="same",
-        kernel_constraint=con,
-        bias_constraint=con,
     )
-    char_conv_3 = Conv1D(
+    char_conv_3 = tf.keras.layers.Conv1D(
         filters,
         3,
         activation="relu",
         name=f"{prefix}_c3",
         dilation_rate=2,
         padding="same",
-        kernel_constraint=con,
-        bias_constraint=con,
     )
-    char_conv_4 = Conv1D(
+    char_conv_4 = tf.keras.layers.Conv1D(
         filters,
         3,
         activation="tanh",
         name=f"{prefix}_c4",
         dilation_rate=3,
         padding="same",
-        kernel_constraint=con,
-        bias_constraint=con,
     )
-    char_conv_5 = Conv1D(
+    char_conv_5 = tf.keras.layers.Conv1D(
         4 * filters,
         3,
         activation="tanh",
         name=f"{prefix}_c5",
         dilation_rate=3,
         padding="same",
-        kernel_constraint=con,
-        bias_constraint=con,
     )
     x = char_emb(inp)
     cc1 = char_conv_1(x)
-    x = Dropout(0.25)(cc1)
+    x = tf.keras.layers.Dropout(0.25)(cc1)
     x = char_conv_2(x)
     x = char_conv_3(x)
-    r1 = Add(name=f"{prefix}_res_conn")([cc1, x])
-    x = Dropout(0.25)(x)
+    r1 = tf.keras.layers.Add(name=f"{prefix}_res_conn")([cc1, x])
+    x = tf.keras.layers.Dropout(0.25)(x)
     x = char_conv_4(x)
-    r2 = Add(name=f"{prefix}_res_conn_2")([r1, x])
+    r2 = tf.keras.layers.Add(name=f"{prefix}_res_conn_2")([r1, x])
     x = char_conv_5(r2)
     return inp, x
 
@@ -149,18 +99,7 @@ class CCLMModelBase:
                 n_filters,
                 prefix,
             )
-            self.embedder = Model(emb_in, emb_out)
-
-    def fit(self, data):
-        """
-        Fit a basic embedder using the data provided and the default cclm
-        pretraining task.
-        """
-        # if there's no preprocessor object yet, create one and fit it
-        if self.preprocessor is None:
-            self.preprocessor = Preprocessor()
-            self.preprocessor.fit(data)
-        pass
+            self.embedder = tf.keras.Model(emb_in, emb_out)
 
     def save(self, path):
         """
@@ -190,9 +129,9 @@ class CCLMModelBase:
             self.prefix,
         )
         if pool:
-            emb_out = GlobalMaxPooling1D(name="context_gmp")(emb_out)
-        self.embedder = Model(emb_in, emb_out)
-        loaded_model = load_model(path, custom_objects={"clipped_bce": clipped_bce})
+            emb_out = tf.keras.layers.GlobalMaxPooling1D(name="context_gmp")(emb_out)
+        self.embedder = tf.keras.Model(emb_in, emb_out)
+        loaded_model = load_model(path)
         loaded_model.compile("Adam", "binary_crossentropy")
         print([layer.name for layer in loaded_model.layers])
         for layer in loaded_model.layers[:-1]:
@@ -212,9 +151,9 @@ class CCLMModelBase:
         printer_callback = PrinterCallback(val, self.preprocessor)
         cb = [ModelCheckpoint(outname, save_best_only=False), printer_callback]
         to_pretrain = self.embedder
-        to_pretrain = GlobalMaxPooling1D()(to_pretrain.output)
-        to_pretrain = Dense(1, activation="sigmoid")(to_pretrain)
-        model = Model(self.embedder.input, to_pretrain)
+        to_pretrain = tf.keras.layers.GlobalMaxPooling1D()(to_pretrain.output)
+        to_pretrain = tf.keras.layers.Dense(1, activation="sigmoid")(to_pretrain)
+        model = tf.keras.Model(self.embedder.input, to_pretrain)
         model.compile("sgd", clipped_bce)
         model.fit_generator(
             gen,
@@ -230,7 +169,7 @@ def rev(prep, a):
     return "".join([prep.char_rev[int(c)] for c in a])
 
 
-class PrinterCallback(keras.callbacks.Callback):
+class PrinterCallback(tf.keras.callbacks.Callback):
     def __init__(self, gen, prep):
         super().__init__()
         self.gen = gen
@@ -250,3 +189,102 @@ class PrinterCallback(keras.callbacks.Callback):
             label,
         )
         print("*" * 80)
+
+
+class MultiHeadSelfAttention(tf.keras.layers.Layer):
+    """
+    From keras examples
+    https://keras.io/examples/nlp/text_classification_with_transformer/
+    """
+
+    def __init__(self, embed_dim, num_heads=8):
+        super(MultiHeadSelfAttention, self).__init__()
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        if embed_dim % num_heads != 0:
+            raise ValueError(
+                f"embedding dimension = {embed_dim} should be divisible by number of heads = {num_heads}"
+            )
+        self.projection_dim = embed_dim // num_heads
+        self.query_dense = tf.keras.layers.Dense(embed_dim)
+        self.key_dense = tf.keras.layers.Dense(embed_dim)
+        self.value_dense = tf.keras.layers.Dense(embed_dim)
+        self.combine_heads = tf.keras.layers.Dense(embed_dim)
+
+    def attention(self, query, key, value):
+        score = tf.matmul(query, key, transpose_b=True)
+        dim_key = tf.cast(tf.shape(key)[-1], tf.float32)
+        scaled_score = score / tf.math.sqrt(dim_key)
+        weights = tf.nn.softmax(scaled_score, axis=-1)
+        output = tf.matmul(weights, value)
+        return output, weights
+
+    def separate_heads(self, x, batch_size):
+        x = tf.reshape(x, (batch_size, -1, self.num_heads, self.projection_dim))
+        return tf.transpose(x, perm=[0, 2, 1, 3])
+
+    def call(self, inputs):
+        # x.shape = [batch_size, seq_len, embedding_dim]
+        batch_size = tf.shape(inputs)[0]
+        query = self.query_dense(inputs)  # (batch_size, seq_len, embed_dim)
+        key = self.key_dense(inputs)  # (batch_size, seq_len, embed_dim)
+        value = self.value_dense(inputs)  # (batch_size, seq_len, embed_dim)
+        query = self.separate_heads(
+            query, batch_size
+        )  # (batch_size, num_heads, seq_len, projection_dim)
+        key = self.separate_heads(
+            key, batch_size
+        )  # (batch_size, num_heads, seq_len, projection_dim)
+        value = self.separate_heads(
+            value, batch_size
+        )  # (batch_size, num_heads, seq_len, projection_dim)
+        attention, weights = self.attention(query, key, value)
+        attention = tf.transpose(
+            attention, perm=[0, 2, 1, 3]
+        )  # (batch_size, seq_len, num_heads, projection_dim)
+        concat_attention = tf.reshape(
+            attention, (batch_size, -1, self.embed_dim)
+        )  # (batch_size, seq_len, embed_dim)
+        output = self.combine_heads(
+            concat_attention
+        )  # (batch_size, seq_len, embed_dim)
+        return output
+
+
+class TransformerBlock(tf.keras.layers.Layer):
+    def __init__(
+        self,
+        embed_dim: int = DEFAULT_EMB_DIM,
+        num_heads: int = 8,
+        ff_dim: int = 32,
+        rate=0.1,
+    ):
+        super(TransformerBlock, self).__init__()
+        self.att = MultiHeadSelfAttention(embed_dim, num_heads)
+        self.ffn = tf.keras.Sequential(
+            [
+                tf.keras.layers.Dense(ff_dim, activation="relu"),
+                tf.keras.layers.Dense(embed_dim),
+            ]
+        )
+        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.dropout1 = tf.keras.layers.Dropout(rate)
+        self.dropout2 = tf.keras.layers.Dropout(rate)
+
+    def call(self, inputs, training):
+        attn_output = self.att(inputs)
+        attn_output = self.dropout1(attn_output, training=training)
+        out1 = self.layernorm1(inputs + attn_output)
+        ffn_output = self.ffn(out1)
+        ffn_output = self.dropout2(ffn_output, training=training)
+        return self.layernorm2(out1 + ffn_output)
+
+
+class TestBlock(tf.keras.layers.Layer):
+    def __init__(self):
+        super(TestBlock, self).__init__()
+        self.d = tf.keras.layers.Dense(10)
+
+    def call(self, inputs, training):
+        return self.d(inputs)
