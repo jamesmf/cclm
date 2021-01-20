@@ -95,7 +95,7 @@ class CCLMModelBase:
             emb_in, emb_out = get_character_embedder(
                 self.preprocessor.max_example_len,
                 char_emb_size,
-                np.max(list(self.preprocessor.char_dict.values())),
+                np.max(list(self.preprocessor.char_dict.values())) + 1,
                 n_filters,
                 prefix,
             )
@@ -105,7 +105,7 @@ class CCLMModelBase:
         """
         Use keras to save the model and its preprocessor
         """
-        pass
+        self.embedder.save(path)
 
     def freeze_embedder(self):
         for layer in self.embedder.layers:

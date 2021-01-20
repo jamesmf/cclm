@@ -1,6 +1,6 @@
 from tqdm import tqdm
 import numpy as np
-from tokenizers import BertWordPieceTokenizer
+from tokenizers import BertWordPieceTokenizer, Encoding
 from typing import List
 import json
 import os
@@ -20,7 +20,7 @@ class MLMPreprocessor:
         batch_size: int = 16,
         num_stopwords: int = 250,
         mask_output_len: int = 4,
-        tokenizer_path: str = "bert-base-uncased-vocab.txt",
+        tokenizer_path: str = None,
     ):
         self.char_dict: Dict[str, int] = {}
         self.char_rev: Dict[int, str] = {}
@@ -31,11 +31,16 @@ class MLMPreprocessor:
         self.batch_size = batch_size
         self.num_stopwords = num_stopwords
         self.mask_output_len = mask_output_len
-        self.tokenizer = BertWordPieceTokenizer(tokenizer_path)
+        self.tokenizer_fit = False
+        if tokenizer_path:
+            self.tokenizer_fit = True
+            self.tokenizer = BertWordPieceTokenizer(tokenizer_path, lowercase=False)
+        else:
+            self.tokenizer = BertWordPieceTokenizer(lowercase=False)
         if load_from:
             self._load(load_from)
 
-    def fit(self, data: List[str], min_char_freq: int = 1, progbar: bool = False):
+    def fit(self, data: List[str], min_char_freq: int = 1, progbar: bool = True):
         """
         Create a character-level dictionary based on a list of strings
         """
@@ -46,7 +51,7 @@ class MLMPreprocessor:
             iterator_ = tqdm(data)
         for example in iterator_:
             chars = Counter(example)
-            split = self.tokenize(example)
+            split = self.tokenize(example).tokens
             tokens = Counter(split)
             # get counts of characters and tokens
             for char, char_count in chars.items():
@@ -91,9 +96,9 @@ class MLMPreprocessor:
         token = re.sub("\d", "#", token)
         return token
 
-    def tokenize(self, string_to_tokenize: str) -> List[str]:
-        string_to_tokenize = string_to_tokenize.lower().strip()
-        return self.tokenizer.encode(string_to_tokenize).tokens
+    def tokenize(self, string_to_tokenize: str) -> Encoding:
+        string_to_tokenize = string_to_tokenize
+        return self.tokenizer.encode(string_to_tokenize)
 
     def string_to_array(self, string_in, length, padding_pre=False):
         # truncate
@@ -102,7 +107,13 @@ class MLMPreprocessor:
         else:
             s = string_in[:length]
         # map char -> int and left-zero-pad
-        mapped = list(map(lambda x: self.char_dict.get(x, 1), s))
+        mapped = np.ones((len(s)))
+        for n, char in enumerate(s):
+            try:
+                mapped[n] = self.char_dict[char]
+            except KeyError:
+                pass
+        # mapped = [self.char_dict.get(x, 1) for x in s]
         if padding_pre:
             r = np.pad(mapped, (length - len(s), 0), "constant", constant_values=(0, 0))
         else:

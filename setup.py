@@ -17,7 +17,7 @@ setup(
         "License :: OSI Approved :: BSD License",
     ],
     install_requires=[
-        "tokenizers==0.9.2",
+        "tokenizers==0.10.0",
         "datasets==1.1.3",
         "tensorflow-gpu==2.3.1",
         "numpy==1.18.5",
