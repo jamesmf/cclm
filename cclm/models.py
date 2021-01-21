@@ -1,3 +1,4 @@
+from typing import List
 import numpy as np
 import json
 import os
@@ -145,25 +146,6 @@ class CCLMModelBase:
             except ValueError:
                 print(f"unable to transfer weights for {layer.name}")
 
-    def pretrain_embedder(self, sents, outname):
-        gen = self.preprocessor.examples_generator(sents)
-        val = self.preprocessor.examples_generator(sents)
-        printer_callback = PrinterCallback(val, self.preprocessor)
-        cb = [ModelCheckpoint(outname, save_best_only=False), printer_callback]
-        to_pretrain = self.embedder
-        to_pretrain = tf.keras.layers.GlobalMaxPooling1D()(to_pretrain.output)
-        to_pretrain = tf.keras.layers.Dense(1, activation="sigmoid")(to_pretrain)
-        model = tf.keras.Model(self.embedder.input, to_pretrain)
-        model.compile("sgd", clipped_bce)
-        model.fit_generator(
-            gen,
-            steps_per_epoch=5000,
-            epochs=1000,
-            validation_data=val,
-            callbacks=cb,
-            validation_steps=50,
-        )
-
 
 def rev(prep, a):
     return "".join([prep.char_rev[int(c)] for c in a])
@@ -288,3 +270,32 @@ class TestBlock(tf.keras.layers.Layer):
 
     def call(self, inputs, training):
         return self.d(inputs)
+
+
+class ComposedModel(tf.keras.layers.Layer):
+    def __init__(
+        self, base: CCLMModelBase, models: List[tf.keras.Model], name="composed_model"
+    ):
+        """
+        Holds a set of pretrained models that share a base. When called, it will
+        run the input through the base's embedder, call each model on that embedding,
+        and concatenate the output along the last dimension
+        """
+        super().__init__()
+        self.models = models
+        self.base = base
+        self.model_name = name
+        self.model = self.build_model()
+
+    def build_model(self):
+        emb = self.base.embedder
+
+        towers = []
+        for model in self.models:
+            x = model(emb.output)
+            towers.append(x)
+        cat = tf.keras.layers.Concatenate()(towers)
+        return tf.keras.Model(emb.input, cat, name=self.model_name)
+
+    def call(self, inputs, training):
+        return self.model(inputs)

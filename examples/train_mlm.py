@@ -30,7 +30,7 @@ dataset = dataset["train"]["text"]
 if not args.load_existing:
 
     prep = MLMPreprocessor(tokenizer_path=None, max_example_len=512)
-    prep.fit(dataset[:10000])
+    prep.fit(dataset[:100000])
 else:
     with open(".models/prep_test.pkl", "rb") as f:
         prep = pickle.load(f)
@@ -45,12 +45,12 @@ if args.load_existing:
     base.embedder = tf.keras.models.load_model(".models/mlm_embedder")
 else:
     pretrainer = MaskedLanguagePretrainer(
-        base=base, downsample_factor=16, n_strided_convs=4, load_from=".models/mlm_test"
+        base=base,
+        downsample_factor=16,
+        n_strided_convs=4,
     )
 
-import cProfile
-
-cProfile.run("pretrainer.fit(dataset[:1000], epochs=10)")
+pretrainer.fit(dataset[:10000], epochs=5)
 
 # pretrainer.save_model(".models/mlm_test")
 # base.save(".models/mlm_embedder")

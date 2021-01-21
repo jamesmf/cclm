@@ -34,9 +34,9 @@ class MLMPreprocessor:
         self.tokenizer_fit = False
         if tokenizer_path:
             self.tokenizer_fit = True
-            self.tokenizer = BertWordPieceTokenizer(tokenizer_path, lowercase=False)
+            self.tokenizer = BertWordPieceTokenizer(tokenizer_path, lowercase=True)
         else:
-            self.tokenizer = BertWordPieceTokenizer(lowercase=False)
+            self.tokenizer = BertWordPieceTokenizer(lowercase=True)
         if load_from:
             self._load(load_from)
 
@@ -44,6 +44,8 @@ class MLMPreprocessor:
         """
         Create a character-level dictionary based on a list of strings
         """
+        if not self.tokenizer_fit:
+            self.tokenizer.train_from_iterator(data)
         char_counter: Counter = Counter()
         token_counter: Counter = Counter()
         iterator_: Iterable = data
@@ -51,37 +53,19 @@ class MLMPreprocessor:
             iterator_ = tqdm(data)
         for example in iterator_:
             chars = Counter(example)
-            split = self.tokenize(example).tokens
-            tokens = Counter(split)
-            # get counts of characters and tokens
             for char, char_count in chars.items():
                 try:
                     char_counter[char] += char_count
                 except KeyError:
                     char_counter[char] = char_count
-            for token, token_count in tokens.items():
-                token = self.scrub(token)
-                try:
-                    token_counter[token] += token_count
-                except KeyError:
-                    token_counter[token] = token_count
-        token_dict = dict(token_counter)
-        token_counts = sorted(token_dict.items(), key=lambda x: x[1], reverse=True)
-        token_counts = token_counts[
-            self.num_stopwords : self.vocab_size + self.num_stopwords
-        ]
 
         counts = [k for k, v in char_counter.items() if v >= min_char_freq]
         self.char_rev = {0: "", 1: "?", 2: "?", 3: ""}
-        self.token_rev = {}
+
         for c in sorted(counts):
             n = len(self.char_rev)
             self.char_rev[n] = c
             self.char_dict[c] = n
-        for w, w_count in sorted(token_counts):
-            n = len(self.token_rev)
-            self.token_rev[n] = w
-            self.token_dict[w] = n
 
     def scrub(self, token):
         """
