@@ -67,6 +67,23 @@ class Pretrainer:
     def save_model(self, path: str):
         self.model.save(path)
 
+    def freeze(self):
+        """
+        Make the layers in the model not trainable. Useful when first combining pretrained models
+        with randomly initialized layers
+        """
+        for layer in self.model.layers:
+            if hasattr(layer, "trainable"):
+                layer.trainable = False
+
+    def unfreeze(self):
+        """
+        Make the layers in the model not trainable.
+        """
+        for layer in self.model.layers:
+            if hasattr(layer, "trainable"):
+                layer.trainable = True
+
 
 class MaskedLanguagePretrainer(Pretrainer):
     def __init__(
@@ -78,7 +95,7 @@ class MaskedLanguagePretrainer(Pretrainer):
         stride_len: int = 2,
         mask_id: int = 1,
         learning_rate: float = 0.001,
-        train_base: bool = False,
+        train_base: bool = True,
         **kwargs,
     ):
         """
