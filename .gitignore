@@ -3,3 +3,6 @@
 *.pytest_cache*
 *.vscode*
 *egg-info*
+.models
+.datasets
+bert-base-uncased-vocab.txt
