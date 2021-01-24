@@ -118,7 +118,7 @@ class MaskedLanguagePretrainer(Pretrainer):
         ), "stride_len^n_strided_convs must equal downsample_factor"
         self.stride_len = int(stride_len)
         self.n_conv_filters = n_conv_filters
-        self.pool = tf.keras.layers.GlobalMaxPool1D()
+        self.pool = tf.keras.layers.GlobalMaxPool1D(dtype="float32")
         self.optimizer = tf.optimizers.SGD(learning_rate)
 
         self.train_base = train_base
@@ -163,9 +163,17 @@ class MaskedLanguagePretrainer(Pretrainer):
                     padding="same",
                     activation="tanh",
                 ),
+                tf.keras.layers.Dropout(0.2),
                 *layers,
+                tf.keras.layers.Dropout(0.2),
                 TransformerBlock(embed_dim=self.n_conv_filters),
                 tf.keras.layers.UpSampling1D(size=self.downsample_factor),
+                Conv1D(
+                    self.n_conv_filters,
+                    self.stride_len,
+                    padding="same",
+                    activation="tanh",
+                ),
             ]
         )
 
@@ -198,7 +206,7 @@ class MaskedLanguagePretrainer(Pretrainer):
                     continue
 
                 # if it's just a [CLS] a few tokens and [SEP], skip it
-                if len(example) < 100:
+                if len(example) < 20:
                     skipped_examples += 1
                     continue
 
@@ -223,7 +231,7 @@ class MaskedLanguagePretrainer(Pretrainer):
                 batch_inputs.append(inp)
                 batch_outputs.append(masked_token)
                 if len(batch_inputs) == batch_size or (
-                    n == len(data) and len(batch_inputs) > 0
+                    n + 1 == len(data) and len(batch_inputs) > 0
                 ):
                     x = self.get_batch(batch_inputs)
                     y = np.array(batch_outputs)
@@ -265,7 +273,10 @@ class MaskedLanguagePretrainer(Pretrainer):
 
     def train_batch(self, x: np.ndarray, y: np.ndarray):
         with tf.GradientTape() as g:
-            rep = self.pool(self.model(self.base.embedder(x)))
+            rep = self.pool(
+                self.model(self.base.embedder(x, training=True), training=True),
+                training=True,
+            )
             loss = self.get_loss(rep, y)
             to_diff = (
                 self.model.trainable_weights + self.base.embedder.trainable_weights
@@ -289,7 +300,7 @@ class MaskedLanguagePretrainer(Pretrainer):
                     biases=self.output_biases,
                     labels=y_true,
                     inputs=x_inp,
-                    num_sampled=128,
+                    num_sampled=64,
                     num_classes=self.preprocessor.tokenizer.get_vocab_size() + 1,
                     num_true=1,
                 )
