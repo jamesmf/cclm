@@ -4,6 +4,11 @@ import json
 import os
 from .preprocessing import MLMPreprocessor
 import tensorflow as tf
+from tensorflow.keras.mixed_precision import experimental as mixed_precision
+
+policy = mixed_precision.Policy("mixed_float16")
+mixed_precision.set_policy(policy)
+
 
 DEFAULT_EMB_DIM = 128
 
@@ -195,7 +200,7 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
 
     def attention(self, query, key, value):
         score = tf.matmul(query, key, transpose_b=True)
-        dim_key = tf.cast(tf.shape(key)[-1], tf.float32)
+        dim_key = tf.cast(tf.shape(key)[-1], tf.float16)
         scaled_score = score / tf.math.sqrt(dim_key)
         weights = tf.nn.softmax(scaled_score, axis=-1)
         output = tf.matmul(weights, value)
@@ -263,15 +268,6 @@ class TransformerBlock(tf.keras.layers.Layer):
         return self.layernorm2(out1 + ffn_output)
 
 
-class TestBlock(tf.keras.layers.Layer):
-    def __init__(self):
-        super(TestBlock, self).__init__()
-        self.d = tf.keras.layers.Dense(10)
-
-    def call(self, inputs, training):
-        return self.d(inputs)
-
-
 class ComposedModel(tf.keras.layers.Layer):
     def __init__(
         self, base: CCLMModelBase, models: List[tf.keras.Model], name="composed_model"
@@ -298,4 +294,4 @@ class ComposedModel(tf.keras.layers.Layer):
         return tf.keras.Model(emb.input, cat, name=self.model_name)
 
     def call(self, inputs, training):
-        return self.model(inputs)
+        return self.model(inputs, training=training)
