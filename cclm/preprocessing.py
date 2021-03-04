@@ -1,6 +1,10 @@
 from tqdm import tqdm
 import numpy as np
-from tokenizers import BertWordPieceTokenizer, Encoding
+from tokenizers import BertWordPieceTokenizer, Encoding, Tokenizer
+from tokenizers.models import BPE
+from tokenizers.trainers import BpeTrainer
+from tokenizers.pre_tokenizers import Whitespace
+from tokenizers.normalizers import Lowercase, NFD, StripAccents, Sequence
 from typing import List
 import json
 import os
@@ -20,7 +24,6 @@ class MLMPreprocessor:
         batch_size: int = 16,
         num_stopwords: int = 250,
         mask_output_len: int = 4,
-        tokenizer_path: str = None,
     ):
         self.char_dict: Dict[str, int] = {}
         self.char_rev: Dict[int, str] = {}
@@ -32,11 +35,12 @@ class MLMPreprocessor:
         self.num_stopwords = num_stopwords
         self.mask_output_len = mask_output_len
         self.tokenizer_fit = False
-        if tokenizer_path:
-            self.tokenizer_fit = True
-            self.tokenizer = BertWordPieceTokenizer(tokenizer_path, lowercase=True)
-        else:
-            self.tokenizer = BertWordPieceTokenizer(lowercase=True)
+        self.tokenizer = Tokenizer(BPE(unk_token="[UNK]"))
+        self.tokenizer.pre_tokenizer = Whitespace()
+        self.tokenizer.normalizer = Sequence([NFD(), Lowercase(), StripAccents()])
+        self.tok_trainer = BpeTrainer(
+            special_tokens=["[UNK]", "[MASK]"], vocab_size=self.vocab_size
+        )
         if load_from:
             self._load(load_from)
 
@@ -45,7 +49,7 @@ class MLMPreprocessor:
         Create a character-level dictionary based on a list of strings
         """
         if not self.tokenizer_fit:
-            self.tokenizer.train_from_iterator(data)
+            self.tokenizer.train_from_iterator(data, trainer=self.tok_trainer)
         char_counter: Counter = Counter()
         token_counter: Counter = Counter()
         iterator_: Iterable = data
