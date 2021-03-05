@@ -46,7 +46,14 @@ class Pretrainer:
         self.base = base
         self.task_name = task_name
 
-    def fit(self, *args, **kwargs):
+    def fit(
+        self,
+        data: List[str],
+        epochs: int = 1,
+        batch_size: int = 32,
+        print_interval: int = 100,
+        evaluate_interval: int = 1000,
+    ):
         """
         This function should perform some form of optimization over a provided dataset.
         Even though the task may involve many inputs and outputs, the result should
@@ -180,6 +187,54 @@ class MaskedLanguagePretrainer(Pretrainer):
 
         return model
 
+    def can_learn_from(self, example_str: str) -> bool:
+        """
+        Decide whether it's appropriate to learn from this example
+        """
+        # if it's an empty string, skip it
+        if example_str == "":
+            return False
+
+        # if it's just a [CLS] a few tokens and [SEP], skip it
+        if len(example_str) < 20:
+            return False
+        return True
+
+    def batch_from_strs(
+        self, input_strs: List[str]
+    ) -> Tuple[List[str], List[Tuple[int, int]], List[int]]:
+        """
+        Transform input strings into correct-length substrings and pick tokens to mask
+        """
+        batch_inputs: List[str] = []
+        batch_outputs: List[int] = []
+        batch_spans: List[Tuple[int, int]] = []
+        tokenizer = self.preprocessor.tokenizer
+        for example in input_strs:
+
+            # subset to a substring of the correct len
+            # encoded = self.get_substr(encoded)
+            example = self.get_substr(example)
+            encoded = tokenizer.encode(example)
+
+            # otherwise, mask a token and predict it
+            possible_masked_tokens = encoded.ids
+            masked_token_index = np.random.randint(
+                0, len(possible_masked_tokens)
+            )  # +1 for [CLS] token we skipped
+            masked_token = encoded.ids[masked_token_index]
+            start, end = encoded.token_to_chars(masked_token_index)
+            masked_token_len = end - start
+            inp = (
+                example[:start]
+                + "?" * masked_token_len
+                + example[start + masked_token_len :]
+            )
+            batch_inputs.append(inp)
+            batch_spans.append((start, end))
+            batch_outputs.append(masked_token)
+        return batch_inputs, batch_spans, batch_outputs
+
     def fit(
         self,
         data: List[str],
@@ -192,51 +247,25 @@ class MaskedLanguagePretrainer(Pretrainer):
         Iterate over a corpus of strings, using the preprocessor's tokenizer to mask
         some tokens, and predicting the masked tokens.
         """
-        tokenizer = self.preprocessor.tokenizer
         for ep in range(epochs):
-            skipped_examples = 0
-            batch_inputs: List[str] = []
-            batch_outputs = []
-            batch_spans: List[Tuple[int, int]] = []
+            batch_strs: List[str] = []
             losses = []
             n_batches_completed = 0
-            for n, example in tqdm(enumerate(data)):
+            for n, example in enumerate(tqdm(data)):
                 example = example.strip()
 
-                # if it's an empty string, skip it
-                if example == "":
-                    skipped_examples += 1
+                if not self.can_learn_from(example):
                     continue
+                batch_strs.append(example)
 
-                # if it's just a [CLS] a few tokens and [SEP], skip it
-                if len(example) < 20:
-                    skipped_examples += 1
-                    continue
-
-                # subset to a substring of the correct len
-                # encoded = self.get_substr(encoded)
-                example = example[: self.preprocessor.max_example_len]
-                encoded = tokenizer.encode(example)
-
-                # otherwise, mask a token and predict it
-                possible_masked_tokens = encoded.ids
-                masked_token_index = np.random.randint(
-                    0, len(possible_masked_tokens)
-                )  # +1 for [CLS] token we skipped
-                masked_token = encoded.ids[masked_token_index]
-                start, end = encoded.token_to_chars(masked_token_index)
-                masked_token_len = end - start
-                inp = (
-                    example[:start]
-                    + "?" * masked_token_len
-                    + example[start + masked_token_len :]
-                )
-                batch_inputs.append(inp)
-                batch_spans.append((start, end))
-                batch_outputs.append(masked_token)
-                if len(batch_inputs) == batch_size or (
-                    n + 1 == len(data) and len(batch_inputs) > 0
+                # if we've accumulated enough valid examples for a batch or the epoch is over
+                if len(batch_strs) == batch_size or (
+                    n + 1 == len(data) and len(batch_strs) > 0
                 ):
+                    batch_inputs, batch_spans, batch_outputs = self.batch_from_strs(
+                        batch_strs
+                    )
+
                     x = self.get_batch(batch_inputs)
                     y = np.array(batch_outputs)
                     if (n_batches_completed + 1) % evaluate_interval == 0:
@@ -251,17 +280,23 @@ class MaskedLanguagePretrainer(Pretrainer):
                         )
 
                     # reset batch
-                    batch_inputs, batch_outputs, batch_spans = [], [], []
+                    batch_inputs, batch_outputs, batch_spans, batch_strs = (
+                        [],
+                        [],
+                        [],
+                        [],
+                    )
 
-    def get_substr(self, inp: Encoding, length: int) -> Tuple[Encoding, int, int]:
+    def get_substr(self, inp: str) -> str:
         """
-        Return an Encoding that is a substring (starting from the beginning of a token)
-        and its start/end indices.
+        Return a substring that is an appropriate length
         """
-        # what is the character length of the Encoded string
-        max_ind = np.max([i[1] for i in inp.offsets[1:-1]])
-        if max_ind < length:
+        max_len = self.preprocessor.max_example_len
+        inp_len = len(inp)
+        if inp_len <= max_len:
             return inp
+        start = np.random.randint(0, inp_len - max_len)
+        return inp[start : start + max_len]
 
         # identify which tokens could be a start token
         possible_start_tokens = [i for i in inp.offsets if i[1] + length <= max_ind]
