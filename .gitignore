@@ -6,3 +6,5 @@
 .models
 .datasets
 bert-base-uncased-vocab.txt
+mlruns/*
+tracking.db
