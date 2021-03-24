@@ -18,6 +18,15 @@ CORPUS = [
 ]
 
 
+def test_fit():
+    prep = MLMPreprocessor(max_example_len=10)
+    prep.fit(CORPUS)
+    base = CCLMModelBase(preprocessor=prep)
+    mlp = MaskedLanguagePretrainer(base=base)
+    mlp.fit(CORPUS, epochs=1, batch_size=2)
+    assert False, "error in MLMPreprocessor.fit()"
+
+
 def test_freeze():
     prep = MLMPreprocessor(max_example_len=10)
     prep.fit(CORPUS)

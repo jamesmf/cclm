@@ -51,7 +51,7 @@ y_train = tf.keras.utils.to_categorical(dataset["train"]["label"])
 y_test = tf.keras.utils.to_categorical(dataset["test"]["label"])
 
 # create the preprocessor and fit it on the training set
-prep = MLMPreprocessor(max_example_len=128, vocab_size=6000)
+prep = MLMPreprocessor(max_example_len=128, vocab_size=10000)
 prep.fit(dataset_train)
 
 x_train = np.array(
@@ -99,7 +99,7 @@ pretrainer_c = MaskedLanguagePretrainer(
     base=base2,
     downsample_factor=1,
     n_strided_convs=4,
-    learning_rate=0.0005,
+    learning_rate=0.01,
     stride_len=1,
 )
 
