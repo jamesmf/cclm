@@ -49,7 +49,6 @@ def get_character_embedder(max_len, char_emb_size, n_chars, filters, prefix):
         3,
         activation="relu",
         name=f"{prefix}_c3",
-        dilation_rate=2,
         padding="same",
     )
     char_conv_4 = tf.keras.layers.Conv1D(
@@ -57,7 +56,6 @@ def get_character_embedder(max_len, char_emb_size, n_chars, filters, prefix):
         3,
         activation="tanh",
         name=f"{prefix}_c4",
-        dilation_rate=3,
         padding="same",
     )
     char_conv_5 = tf.keras.layers.Conv1D(
@@ -65,7 +63,6 @@ def get_character_embedder(max_len, char_emb_size, n_chars, filters, prefix):
         3,
         activation="tanh",
         name=f"{prefix}_c5",
-        dilation_rate=3,
         padding="same",
     )
     x = char_emb(inp)

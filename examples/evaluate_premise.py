@@ -24,9 +24,9 @@ ap.add_argument(
     help="number of examples to train on from each dataset",
 )
 ap.add_argument(
-    "--pretrain",
+    "--skip-pretrain",
     action="store_true",
-    dest="pretrain",
+    dest="skip_pretrain",
     help="whether to pretrain on another dataset",
 )
 args = ap.parse_args()
@@ -109,8 +109,20 @@ pretrainer_d = MaskedLanguagePretrainer(
     n_strided_convs=4,
 )
 
-
-pretrainer_c.fit(dataset_train, epochs=25, print_interval=200, evaluate_interval=300)
+if not args.skip_pretrain:
+    tensorboard_callback = tf.keras.callbacks.TensorBoard(
+        log_dir=".tensorboard", histogram_freq=1
+    )
+    pretraining_generator = pretrainer_c.generator(dataset_train, batch_size=32)
+    pretrainer_c.pretraining_model.compile(
+        "adam", "binary_crossentropy", metrics=["accuracy"]
+    )
+    pretrainer_c.pretraining_model.fit(
+        pretraining_generator,
+        epochs=25,
+        steps_per_epoch=5000,
+        callbacks=[tensorboard_callback],
+    )
 
 print(pretrainer_c.model.summary())
 print(pretrainer_c.base.embedder.summary())
@@ -125,6 +137,14 @@ pretrained = tf.keras.Model(composed2.model.input, out(d(gmp(composed2.model.out
 pretrained.compile(
     tf.keras.optimizers.Adam(0.0005), "categorical_crossentropy", metrics=["accuracy"]
 )
+tensorboard_callback = tf.keras.callbacks.TensorBoard(
+    log_dir=".tensorboard", histogram_freq=1
+)
 history_pretrained = pretrained.fit(
-    x_train, y_train, validation_data=(x_test, y_test), epochs=15, batch_size=64
+    x_train,
+    y_train,
+    validation_data=(x_test, y_test),
+    epochs=15,
+    batch_size=32,
+    callbacks=[tensorboard_callback],
 )

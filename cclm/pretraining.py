@@ -46,22 +46,6 @@ class Pretrainer:
         self.base = base
         self.task_name = task_name
 
-    def fit(
-        self,
-        data: List[str],
-        epochs: int = 1,
-        batch_size: int = 32,
-        print_interval: int = 100,
-        evaluate_interval: int = 1000,
-    ):
-        """
-        This function should perform some form of optimization over a provided dataset.
-        Even though the task may involve many inputs and outputs, the result should
-        be that the .model gets fit such that it accets input from a `base` and
-        produces output that matches the shape of the input.
-        """
-        raise NotImplementedError
-
     def get_model(self, *args, **kwargs):
         """
         This should return a Model that accepts input with the shape of a `base` and
@@ -92,7 +76,7 @@ class Pretrainer:
                 layer.trainable = True
 
 
-class MaskedLanguagePretrainer(Pretrainer):
+class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
     def __init__(
         self,
         *args,
@@ -116,6 +100,7 @@ class MaskedLanguagePretrainer(Pretrainer):
         making the Transformer layer less expensive. The kernel_size of the conv layers
         also match the stride_len for simplicity
         """
+        tf.keras.Model.__init__(self)
         self.preprocessor = kwargs.get("preprocessor", MLMPreprocessor())
         base = kwargs.get("base")
         if base:
@@ -157,7 +142,8 @@ class MaskedLanguagePretrainer(Pretrainer):
         self.output_embedding = tf.keras.layers.Embedding(
             self.preprocessor.tokenizer.get_vocab_size() + 1, self.n_conv_filters
         )
-        super().__init__(*args, **kwargs)
+        Pretrainer.__init__(self, *args, **kwargs)
+        self.pretraining_model = self.get_pretraining_model()
 
     def get_model(
         self,
@@ -271,30 +257,23 @@ class MaskedLanguagePretrainer(Pretrainer):
             batch_outputs.append(masked_token_id)
         return batch_inputs, batch_spans, batch_outputs
 
-    def fit(
-        self,
-        data: List[str],
-        epochs: int = 1,
-        batch_size: int = 32,
-        print_interval: int = 100,
-        evaluate_interval: int = 1000,
-    ):
+    def generator(self, data: List[str], batch_size: int):
         """
-        Iterate over a corpus of strings, using the preprocessor's tokenizer to mask
-        some tokens, and predicting the masked tokens.
+        Generator for training purposes
         """
-        for ep in range(epochs):
-            batch_strs: List[str] = []
-            losses = []
-            n_batches_completed = 0
-            for n, example in enumerate(tqdm(data)):
+        while True:
+            batch_inputs, batch_outputs, batch_spans, batch_strs = (
+                [],
+                [],
+                [],
+                [],
+            )
+            for n, example in enumerate(data):
                 example = example.strip()
 
                 if not self.can_learn_from(example):
                     continue
                 batch_strs.append(example)
-
-                # if we've accumulated enough valid examples for a batch or the epoch is over
                 if len(batch_strs) == batch_size or (
                     n + 1 == len(data) and len(batch_strs) > 0
                 ):
@@ -303,25 +282,30 @@ class MaskedLanguagePretrainer(Pretrainer):
                     )
 
                     x = self.get_batch(batch_inputs, batch_spans=batch_spans)
-                    y = np.array(batch_outputs)
-                    if (n_batches_completed + 1) % evaluate_interval == 0:
-                        evaluation = self.evaluate(x, y, batch_inputs, batch_spans)
-                        print(evaluation)
-                    loss = self.train_batch(x, y, batch_spans)
-                    n_batches_completed += 1
-                    losses.append(loss)
-                    if n_batches_completed % print_interval == 0:
-                        tqdm.write(
-                            f"Mean loss after {n_batches_completed} batches: {np.mean(losses)}"
-                        )
+                    x = tf.concat([x, *[x for _ in range(self.num_negatives)]], axis=0)
 
-                    # reset batch
+                    y = np.array(batch_outputs)
+                    y_sample, token_sample, mask = self.sample_from_positive(
+                        y, x, batch_spans
+                    )
+                    yield [x, token_sample, mask], y_sample
                     batch_inputs, batch_outputs, batch_spans, batch_strs = (
                         [],
                         [],
                         [],
                         [],
                     )
+
+    def train_step(self, data):
+        """
+        Iterate over a corpus of strings, using the preprocessor's tokenizer to mask
+        some tokens, and predicting the masked tokens.
+        """
+        x, y_true = data
+        x_char, x_token, mask = x
+        loss, preds = self.train_batch(x_char, x_token, y_true, mask)
+        self.compiled_metrics.update_state(y_true, preds)
+        return {m.name: m.result() for m in self.metrics}
 
     def get_substr(self, inp: str) -> str:
         """
@@ -334,13 +318,20 @@ class MaskedLanguagePretrainer(Pretrainer):
         start = np.random.randint(0, inp_len - max_len)
         return inp[start : start + max_len]
 
+    def account_for_downsample(self, inp_len: int) -> int:
+        """
+        Since the transformer model might downsample, we might need to do extra padding
+        """
+        return 32
+        return inp_len + (inp_len % self.downsample_factor)
+
     def get_batch(
         self, input_strings: List[str], batch_spans: List[Tuple[int, int, str]] = None
     ) -> np.ndarray:
         """
         Return vector encoding of a batch of strings using the preprocessor
         """
-        max_len = np.max(list(map(len, input_strings)))
+        max_len = self.account_for_downsample(np.max(list(map(len, input_strings))))
         out = np.zeros((len(input_strings), max_len))
         for n, s in enumerate(input_strings):
             out[n] = self.preprocessor.string_to_array(s, max_len)
@@ -350,24 +341,33 @@ class MaskedLanguagePretrainer(Pretrainer):
         return out
 
     def train_batch(
-        self, x: np.ndarray, y: np.ndarray, batch_spans: List[Tuple[int, int, str]]
+        self, x_char: np.ndarray, x_token: np.ndarray, y: np.ndarray, mask: np.ndarray
     ):
         with tf.GradientTape() as g:
-            rep = self.get_embedding_for_pretraining(
-                x, batch_spans=batch_spans, training=True
-            )
-            loss, _, _ = self.get_loss(rep, y)
+            # char_rep = self.get_embedding_for_pretraining(
+            #     x_char, mask=mask, training=True
+            # )
+            # token_emb = self.output_embedding(x_token)
+
+            # loss, predictions = self.get_loss(char_rep, token_emb, y)
+            predictions = self([x_char, x_token, mask], training=True)
+            loss = self.compiled_loss(y, predictions)
             to_diff = (
                 self.model.trainable_weights + self.base.embedder.trainable_weights
                 if self.train_base
-                else [] + [self.output_weights, self.output_biases]
+                else []
+                + [
+                    self.output_embedding.trainable_weights,
+                    self.classification_head.trainable_weights,
+                ]
             )
             gradients = g.gradient(loss, to_diff)
             self.optimizer.apply_gradients(zip(gradients, to_diff))
-        return loss
+
+        return loss, predictions
 
     def get_embedding_for_pretraining(
-        self, x: np.ndarray, batch_spans=None, training=True
+        self, x: np.ndarray, mask, training=True
     ) -> np.ndarray:
         """
         Embed the text and possibly pool the whole thing or pool just the masked token
@@ -377,14 +377,10 @@ class MaskedLanguagePretrainer(Pretrainer):
         if self.training_pool_mode == "global":
             rep = self.pool(rep)
         else:
-            # or pool the vector of the masked token
-            mask = np.zeros(rep.shape[:-1])
-            for n, span in enumerate(batch_spans):
-                mask[n][span[0] : span[1] + 1] = 1
-            rep = self.pool(rep * mask.reshape(*mask.shape, 1))
+            rep = self.pool(self.mask_mul([rep, mask]))
         return rep
 
-    def get_loss(self, x_inp: np.ndarray, y: np.ndarray):
+    def sample_from_positive(self, y, x, batch_spans):
         with tf.device("/GPU:0"):
             # Compute the average loss for the batch.
             y_true = tf.cast(tf.reshape(y, [-1, 1]), tf.int64)
@@ -406,31 +402,55 @@ class MaskedLanguagePretrainer(Pretrainer):
                 (tf.ones((y_true.shape[0], 1)), tf.zeros((neg_sample.shape[0], 1))),
                 axis=0,
             )
-            embedding_reps = tf.concat(
-                [x_inp, *[x_inp for _ in range(self.num_negatives)]], axis=0
-            )
             token_sample = tf.reshape(
                 tf.concat((y_true, tf.reshape(neg_sample, (-1, 1))), axis=0), (-1,)
             )
-            output_embeddings = self.output_embedding(token_sample)
+            mask = np.zeros_like(x)
+            ind = 0
+            for span in batch_spans:
+                mask[ind][span[0] : span[1]] = 1.0
+                ind += 1
 
-            cat = self.concat([embedding_reps, output_embeddings])
+            for _ in range(self.num_negatives):
+                for span in batch_spans:
+                    mask[ind][span[0] : span[1]] = 1
+                    ind += 1
+            mask = mask.reshape((*mask.shape[:2], 1))
+            # mask = tf.cast(mask, tf.float16)
+            return y_sample, token_sample, mask
+
+    def get_loss(
+        self,
+        rep_char: tf.Tensor,
+        rep_token: tf.Tensor,
+        y_sample: np.ndarray,
+    ):
+        with tf.device("/GPU:0"):
+
+            cat = self.concat([rep_char, rep_token])
             predictions = self.classification_head(cat)
-            loss = tf.keras.losses.binary_crossentropy(y_sample, predictions)
-            # loss = tf.reduce_mean(
-            #     tf.nn.sampled_softmax_loss(
-            #         weights=self.output_weights,
-            #         biases=self.output_biases,
-            #         labels=y_true,
-            #         inputs=x_inp,
-            #         num_sampled=self.num_negatives,
-            #         sampled_values=sampled,
-            #         num_classes=self.preprocessor.tokenizer.get_vocab_size() + 1,
-            #         num_true=1,
-            #     )
-            # )
-            # print(loss, token_sample, y_sample)
-            return loss, token_sample, y_sample
+            loss = self.compiled_loss(y_sample, predictions)
+            return loss, predictions
+
+    def get_pretraining_model(self):
+        """
+        Return a Model for training using negative sampling
+        """
+        inp_char = tf.keras.layers.Input((None,))
+        inp_token = tf.keras.layers.Input((1,))
+        inp_mask = tf.keras.layers.Input((None,))
+
+        rep = self.base.embedder(inp_char)
+        rep = self.model(rep)
+        mul = self.pool(tf.keras.layers.Multiply()([rep, inp_mask]))
+
+        emb_token = self.pool(self.output_embedding(inp_token))
+        cat = self.concat([emb_token, mul])
+        out = self.classification_head(cat)
+        return tf.keras.Model([inp_char, inp_token, inp_mask], out)
+
+    def call(self, x, training=False):
+        return self.pretraining_model(x, training=training)
 
     def evaluate(
         self,
