@@ -29,6 +29,7 @@ ap.add_argument(
     dest="skip_pretrain",
     help="whether to pretrain on another dataset",
 )
+ap.add_argument("--lr", dest="lr", help="learning rate", type=float, default=0.001)
 args = ap.parse_args()
 
 mlflow.set_tracking_uri("sqlite:///tracking.db")
@@ -113,9 +114,9 @@ if not args.skip_pretrain:
     tensorboard_callback = tf.keras.callbacks.TensorBoard(
         log_dir=".tensorboard", histogram_freq=1
     )
-    pretraining_generator = pretrainer_c.generator(dataset_train, batch_size=32)
+    pretraining_generator = pretrainer_c.generator(dataset_train, batch_size=6)
     pretrainer_c.pretraining_model.compile(
-        "adam", "binary_crossentropy", metrics=["accuracy"]
+        tf.keras.optimizers.Adam(args.lr), "binary_crossentropy", metrics=["accuracy"]
     )
     pretrainer_c.pretraining_model.fit(
         pretraining_generator,
@@ -127,24 +128,24 @@ if not args.skip_pretrain:
 print(pretrainer_c.model.summary())
 print(pretrainer_c.base.embedder.summary())
 
-composed2 = ComposedModel(base2, [pretrainer_c.model, pretrainer_d.model])
+# composed2 = ComposedModel(base2, [pretrainer_c.model, pretrainer_d.model])
 
-# put a classification head on it
-gmp = tf.keras.layers.GlobalMaxPool1D()
-d = tf.keras.layers.Dense(4)
-out = tf.keras.layers.Activation("softmax", dtype="float32")
-pretrained = tf.keras.Model(composed2.model.input, out(d(gmp(composed2.model.output))))
-pretrained.compile(
-    tf.keras.optimizers.Adam(0.0005), "categorical_crossentropy", metrics=["accuracy"]
-)
-tensorboard_callback = tf.keras.callbacks.TensorBoard(
-    log_dir=".tensorboard", histogram_freq=1
-)
-history_pretrained = pretrained.fit(
-    x_train,
-    y_train,
-    validation_data=(x_test, y_test),
-    epochs=15,
-    batch_size=32,
-    callbacks=[tensorboard_callback],
-)
+# # put a classification head on it
+# gmp = tf.keras.layers.GlobalMaxPool1D()
+# d = tf.keras.layers.Dense(4)
+# out = tf.keras.layers.Activation("softmax", dtype="float32")
+# pretrained = tf.keras.Model(composed2.model.input, out(d(gmp(composed2.model.output))))
+# pretrained.compile(
+#     tf.keras.optimizers.Adam(0.0005), "categorical_crossentropy", metrics=["accuracy"]
+# )
+# tensorboard_callback = tf.keras.callbacks.TensorBoard(
+#     log_dir=".tensorboard", histogram_freq=1
+# )
+# history_pretrained = pretrained.fit(
+#     x_train,
+#     y_train,
+#     validation_data=(x_test, y_test),
+#     epochs=15,
+#     batch_size=32,
+#     callbacks=[tensorboard_callback],
+# )
