@@ -1,20 +1,5 @@
-import json
-import os
 from typing import List, Tuple
 import numpy as np
-from tqdm import tqdm
-from tokenizers import Encoding
-from tensorflow.keras.layers import (
-    Input,
-    Conv1D,
-    Multiply,
-    Dropout,
-    Dense,
-    Concatenate,
-    GlobalMaxPooling1D,
-    Permute,
-)
-import tensorflow.keras.backend as K
 import tensorflow as tf
 from .models import CCLMModelBase, TransformerBlock
 from .preprocessing import MLMPreprocessor
@@ -25,8 +10,6 @@ class Pretrainer:
     A pretrainer needs to accept a base, implement some core layers that it
     will fit (in addition to the base, optionally), and implement a top to the
     network that represents its specific task.
-
-    The
     """
 
     def __init__(
@@ -157,7 +140,7 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
         # reduce the size, transformer, upsample
 
         layers = [
-            Conv1D(
+            tf.keras.layers.Conv1D(
                 self.n_conv_filters,
                 self.stride_len,
                 strides=self.stride_len,
@@ -168,7 +151,7 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
         ]
         model = tf.keras.Sequential(
             [
-                Conv1D(
+                tf.keras.layers.Conv1D(
                     self.n_conv_filters,
                     self.stride_len,
                     padding="same",
@@ -183,7 +166,7 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
                     for _ in range(1)
                     if self.downsample_factor > 1
                 ],
-                Conv1D(
+                tf.keras.layers.Conv1D(
                     self.n_conv_filters,
                     self.stride_len,
                     padding="same",
@@ -282,7 +265,7 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
                     )
 
                     x = self.get_batch(batch_inputs, batch_spans=batch_spans)
-                    x = tf.concat([x, *[x for _ in range(self.num_negatives)]], axis=0)
+                    # x = tf.concat([x, *[x for _ in range(self.num_negatives)]], axis=0)
 
                     y = np.array(batch_outputs)
                     y_sample, token_sample, mask = self.sample_from_positive(
@@ -322,7 +305,6 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
         """
         Since the transformer model might downsample, we might need to do extra padding
         """
-        return 32
         return inp_len + (inp_len % self.downsample_factor)
 
     def get_batch(
@@ -383,7 +365,8 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
     def sample_from_positive(self, y, x, batch_spans):
         with tf.device("/GPU:0"):
             # Compute the average loss for the batch.
-            y_true = tf.cast(tf.reshape(y, [-1, 1]), tf.int64)
+            # y_true = tf.cast(tf.reshape(y, [-1, 1]), tf.int64)
+            y_true = y.reshape(-1, 1)
             # sampled = tf.random.learned_unigram_candidate_sampler(
             (
                 neg_sample,
@@ -398,24 +381,28 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
                 name="sampler_dist",
             )
             # true samples get a 1, negative samples get a 0
-            y_sample = tf.concat(
-                (tf.ones((y_true.shape[0], 1)), tf.zeros((neg_sample.shape[0], 1))),
-                axis=0,
-            )
-            token_sample = tf.reshape(
-                tf.concat((y_true, tf.reshape(neg_sample, (-1, 1))), axis=0), (-1,)
-            )
-            mask = np.zeros_like(x)
+            y_sample = np.zeros((y_true.shape[0], 1 + self.num_negatives))
+            y_sample[:, 0] = 1.0
+            # y_sample = tf.concat(
+            #     (tf.ones((y_true.shape[0], 1)), tf.zeros((neg_sample.shape[0], 1))),
+            #     axis=0,
+            # )
+            neg_sample = neg_sample.numpy().reshape(y_true.shape[0], self.num_negatives)
+            token_sample = np.concatenate((y_true, neg_sample), axis=1)
+            # token_sample = tf.reshape(
+            #     tf.concat((y_true, tf.reshape(neg_sample, (-1, 1))), axis=0), (-1,)
+            # )
+            mask = np.zeros((*(x.shape), self.n_conv_filters))
             ind = 0
             for span in batch_spans:
-                mask[ind][span[0] : span[1]] = 1.0
+                mask[ind][span[0] : span[1]] = 1
                 ind += 1
 
-            for _ in range(self.num_negatives):
-                for span in batch_spans:
-                    mask[ind][span[0] : span[1]] = 1
-                    ind += 1
-            mask = mask.reshape((*mask.shape[:2], 1))
+            # for _ in range(self.num_negatives):
+            #     for span in batch_spans:
+            #         mask[ind][span[0] : span[1]] = 1
+            #         ind += 1
+            # mask = mask.reshape((*mask.shape[:2], 1))
             # mask = tf.cast(mask, tf.float16)
             return y_sample, token_sample, mask
 
@@ -437,46 +424,35 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
         Return a Model for training using negative sampling
         """
         inp_char = tf.keras.layers.Input((None,))
-        inp_token = tf.keras.layers.Input((1,))
+        inp_token = tf.keras.layers.Input((1 + self.num_negatives,))
         inp_mask = tf.keras.layers.Input((None,))
 
         rep = self.base.embedder(inp_char)
         rep = self.model(rep)
         mul = self.pool(tf.keras.layers.Multiply()([rep, inp_mask]))
+        mul = tf.keras.layers.Reshape((1, self.n_conv_filters))(mul)
 
-        emb_token = self.pool(self.output_embedding(inp_token))
-        cat = self.concat([emb_token, mul])
-        out = self.classification_head(cat)
+        emb_token = self.output_embedding(inp_token)
+        # cat = self.concat([emb_token, mul])
+        # out = self.classification_head(cat)
+        out = tf.keras.layers.Activation("linear", dtype="float32")(
+            tf.keras.layers.Dot((2, 2), normalize=True)([emb_token, mul])
+        )
         return tf.keras.Model([inp_char, inp_token, inp_mask], out)
 
     def call(self, x, training=False):
         return self.pretraining_model(x, training=training)
 
-    def evaluate(
-        self,
-        x: np.ndarray,
-        y: np.ndarray,
-        batch_inputs: List[str],
-        batch_spans: List[Tuple[int, int, str]],
-        n_examples: int = 5,
-        n_nearest: int = 5,
-    ):
-        return ""
-        training = True  # if this improves evaluation, there's a bug
-        print_str = ""
-        # Compute the cosine similarity between input data embedding and every embedding vector
-        rep = self.get_embedding_for_pretraining(
-            x, batch_spans=batch_spans, training=True
+
+class MLMTrainingLogger:
+    def __init__(self, generator, preprocessor):
+        self.generator = generator
+        self.preprocessor = preprocessor
+        self.logged_examples = []
+
+    def log_example(self, x_char, x_token, y_pred):
+        example_text = "".join([self.preprocessor.char_rev[i] for i in x_char])
+        candidates = "\n".join(
+            [self.preprocessor.tokenizer.id_to_token(i) for i in x_token]
         )
-
-        logits = tf.matmul(rep, tf.transpose(self.output_weights))
-        logits = tf.nn.bias_add(logits, self.output_biases).numpy()
-
-        for i in range(n_examples):
-            print_str += f"\nExample {i}:\n\n{batch_inputs[i]}\n"
-            nearest = (-logits[i, :]).argsort()[:n_nearest]
-            print_str += f"ground truth: {self.preprocessor.tokenizer.id_to_token(int(y[i]))}\n\npredicted:\n"
-
-            for k in range(n_nearest):
-                print_str += "\n-" + self.preprocessor.tokenizer.id_to_token(nearest[k])
-        return print_str
+        return f"Example:\n\n{example_text}\n\nCandidates:\n{candidates}\n\nPredictions: {y_pred}"
