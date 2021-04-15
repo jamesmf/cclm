@@ -20,6 +20,22 @@ CORPUS = [
 ]
 
 
+# def test_generator():
+#     prep = MLMPreprocessor(max_example_len=10)
+#     prep.fit(CORPUS)
+#     base = CCLMModelBase(preprocessor=prep)
+#     mlp = MaskedLanguagePretrainer(
+#         base=base,
+#     )
+#     gen = mlp.generator(CORPUS, batch_size=2)
+#     x, y = next(gen)
+#     print(x)
+#     for thing in x:
+#         print(thing.shape)
+#     print(y)
+#     assert False
+
+
 def test_fit():
     prep = MLMPreprocessor(max_example_len=10)
     prep.fit(CORPUS)
@@ -32,30 +48,38 @@ def test_fit():
         training_pool_mode="global",
     )
     gen = mlp.generator(CORPUS, batch_size=2)
-    mlp.compile("adam", "binary_crossentropy")
-    mlp.fit(gen, epochs=1, steps_per_epoch=2)
-    assert False, "error in MLMPreprocessor.fit()"
-
-
-def test_pretraining_model():
-    prep = MLMPreprocessor(max_example_len=10)
-    prep.fit(CORPUS)
-    base = CCLMModelBase(preprocessor=prep)
-    mlp = MaskedLanguagePretrainer(
-        base=base,
-        stride_len=1,
-        downsample_factor=1,
-        n_strided_convs=2,
-        training_pool_mode="global",
-    )
-    gen = mlp.generator(CORPUS, batch_size=2)
-    x, y = next(gen)
-    xc, xs, m = x
-    sm = mlp.pretraining_model
-    sm.compile("adam", "binary_crossentropy")
-    print(sm.summary())
-    sm.fit(gen, epochs=1, steps_per_epoch=2)
+    mlp.pretraining_model.compile("adam", "categorical_crossentropy")
+    x = next(gen)[0]
+    print(x[0])
+    print(x[1])
+    print(x[2])
+    print(x[2].shape)
+    print(mlp.pretraining_model.summary())
+    result = mlp.pretraining_model.predict(x)
+    print(result)
+    mlp.pretraining_model.fit(gen, epochs=1, steps_per_epoch=2)
     assert True, "error in MLMPreprocessor.fit()"
+
+
+# def test_pretraining_model():
+#     prep = MLMPreprocessor(max_example_len=10)
+#     prep.fit(CORPUS)
+#     base = CCLMModelBase(preprocessor=prep)
+#     mlp = MaskedLanguagePretrainer(
+#         base=base,
+#         stride_len=1,
+#         downsample_factor=1,
+#         n_strided_convs=2,
+#         training_pool_mode="global",
+#     )
+#     gen = mlp.generator(CORPUS, batch_size=2)
+#     x, y = next(gen)
+#     xc, xs, m = x
+#     sm = mlp.pretraining_model
+#     sm.compile("adam", "binary_crossentropy")
+#     print(sm.summary())
+#     sm.fit(gen, epochs=1, steps_per_epoch=2)
+#     assert True, "error in MLMPreprocessor.fit()"
 
 
 # def test_freeze():
