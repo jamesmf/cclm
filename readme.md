@@ -6,16 +6,16 @@
 
 1) Modularity: Fine-tuning large language models is expensive. `cclm` seeks to decompose models into subcomponents that can be readily mixed and matched, allowing for a wider variety of sizes, architectures, and pretraining methods. Rather than fine-tuning a huge model on your own data, fit a smaller one on your dataset and combine it with off-the-shelf models.
 
-2) Character-level input: Many corpora used in pretraining are clean and typo-free, but a lot of user-focused inputs aren't - leaving you at a disadvantage if your tokenization scheme isn't flexible enough. Using characters as input also makes it simple define many 'heads' of a model with the same input space.
+2) Character-level input: Many corpora used in pretraining are clean and typo-free, but a lot of input in real world applications aren't - leaving you at a disadvantage if your tokenization scheme isn't flexible enough. Using characters as input also makes it simple define many 'heads' of a model with the same input space.
 
 3) Ease of use: It should be quick to get started and easy to deploy. 
 
 
 #### How does it work?
 
-The way `cclm` hopes to achieve the above is by making the model building process composable. There are many ways to pretrain a model on text, and infinite corpora on which to train, and each application has different needs.
+The way `cclm` aims to achieve the above is by making the model building process composable. There are many ways to pretrain a model on text, and infinite corpora on which to train, and each application has different needs.
 
-`cclm` makes it possible to define a 'base' input on which to build many different computational graphs, then combine them. For instance, if there is a standard, published `cclm` model trained with masked language modeling (MLM) on (`wikitext` + `bookcorpus`), you might start with that, but add a second 'tower' to that model that uses the same 'base', but is pretrained to extract entities from `wiki-ner`. By combining the two pretrained 'towers', you get a model with information from both tasks that you can then use as a starting point for your downstream model.
+`cclm` makes it possible to define a `base` input on which to build many different computational graphs, then combine them. For instance, if there is a standard, published `cclm` model trained with masked language modeling (MLM) on (`wikitext` + `bookcorpus`), you might start with that, but add a second 'tower' to that model that uses the same `base`, but is pretrained to extract entities from `wiki-ner`. By combining the two pretrained 'towers', you get a model with information from both tasks that you can then use as a starting point for your downstream model.
 
 As the package matures, the goal is to make available many pretraining methods (starting with Masked Language Modeling) and to publish standard pretrained models (like huggingface/transformers, spacy, tensorflowhub, ...).
 
@@ -59,7 +59,7 @@ pretrainer = MaskedLanguagePretrainer(
 pretrainer.fit(dataset, epochs=10)
 ```
 
-The `MaskedLanguagePretrainer` defines a transformer model (which uses strided convolutions to reduce the size before the transformer layer, then upsamples to match the original size), and calling `.fit()` will use the `MLMPreprocessor` associated with the `base` to produce masked inputs and try to identify the missing input token(s) using `sampled_softmax` loss.
+The `MaskedLanguagePretrainer` defines a transformer model (which uses strided convolutions to reduce the size before the transformer layer, then upsamples to match the original size), and calling `.fit()` will use the `MLMPreprocessor` associated with the `base` to produce masked inputs and try to identify the missing input token(s) using `sampled_softmax` loss or negative sampling.
 
 Once you've trained one or more models with `Pretrainer` objects, you can compose them together into one model.
 
