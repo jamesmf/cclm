@@ -33,7 +33,7 @@ ap.add_argument("--lr", dest="lr", help="learning rate", type=float, default=0.0
 args = ap.parse_args()
 
 mlflow.set_tracking_uri("sqlite:///tracking.db")
-mlflow.tensorflow.autolog()
+mlflow.tensorflow.autolog(every_n_iter=1)
 
 mlflow.log_params(vars(args))
 
@@ -60,92 +60,68 @@ x_train = np.array(
 )
 x_test = np.array([prep.string_to_array(i, prep.max_example_len) for i in dataset_test])
 
-# # create a base
-# base = CCLMModelBase(preprocessor=prep)
+# create a base that embeds the input
+base = CCLMModelBase(preprocessor=prep)
 
-# # create two pretrainers that we'll combine
-# pretrainer_a = MaskedLanguagePretrainer(
-#     base=base,
-#     downsample_factor=16,
-#     n_strided_convs=4,
-# )
+# create two models that we'll combine - optionally we can pretrain one or more of them
 
-# pretrainer_b = MaskedLanguagePretrainer(
-#     base=base,
-#     downsample_factor=16,
-#     n_strided_convs=4,
-# )
-
-# composed = ComposedModel(base, [pretrainer_a.model, pretrainer_b.model])
-
-# # put a classification head on it
-# gmp = tf.keras.layers.GlobalMaxPool1D()
-# d = tf.keras.layers.Dense(4)
-# out = tf.keras.layers.Activation("softmax", dtype="float32")
-# not_pretrained = tf.keras.Model(
-#     composed.model.input, out(d(gmp(composed.model.output)))
-# )
-# not_pretrained.compile(
-#     tf.keras.optimizers.Adam(0.0001), "categorical_crossentropy", metrics=["accuracy"]
-# )
-# history = not_pretrained.fit(
-#     x_train, y_train, validation_data=(x_test, y_test), epochs=5, batch_size=64
-# )
-
-
-# repeat the same, but first pretraining at least one
-base2 = CCLMModelBase(preprocessor=prep)
-
-pretrainer_c = MaskedLanguagePretrainer(
-    base=base2,
+pretrainer_a = MaskedLanguagePretrainer(
+    base=base,
     downsample_factor=1,
     n_strided_convs=4,
-    learning_rate=0.01,
     stride_len=1,
 )
 
-pretrainer_d = MaskedLanguagePretrainer(
-    base=base2,
+pretrainer_b = MaskedLanguagePretrainer(
+    base=base,
     downsample_factor=16,
     n_strided_convs=4,
 )
+
+
+def custom_loss(y, pred):
+    clip = tf.clip_by_value(pred, 0.01, 0.8)
+    return tf.losses.categorical_crossentropy(y, clip)
+
 
 if not args.skip_pretrain:
     tensorboard_callback = tf.keras.callbacks.TensorBoard(
         log_dir=".tensorboard", histogram_freq=1
     )
-    pretraining_generator = pretrainer_c.generator(dataset_train, batch_size=6)
-    pretrainer_c.pretraining_model.compile(
-        tf.keras.optimizers.Adam(args.lr), "binary_crossentropy", metrics=["accuracy"]
+    pretraining_generator = pretrainer_a.generator(dataset_train, batch_size=16)
+    pretrainer_a.pretraining_model.compile(
+        tf.keras.optimizers.Adam(args.lr),
+        custom_loss,
+        metrics=["categorical_accuracy"],
     )
-    pretrainer_c.pretraining_model.fit(
+    pretrainer_a.pretraining_model.fit(
         pretraining_generator,
-        epochs=25,
+        epochs=50,
         steps_per_epoch=5000,
         callbacks=[tensorboard_callback],
     )
 
-print(pretrainer_c.model.summary())
-print(pretrainer_c.base.embedder.summary())
+print(pretrainer_a.model.summary())
+print(pretrainer_a.base.embedder.summary())
 
-# composed2 = ComposedModel(base2, [pretrainer_c.model, pretrainer_d.model])
+composed2 = ComposedModel(base, [pretrainer_a.model, pretrainer_b.model])
 
-# # put a classification head on it
-# gmp = tf.keras.layers.GlobalMaxPool1D()
-# d = tf.keras.layers.Dense(4)
-# out = tf.keras.layers.Activation("softmax", dtype="float32")
-# pretrained = tf.keras.Model(composed2.model.input, out(d(gmp(composed2.model.output))))
-# pretrained.compile(
-#     tf.keras.optimizers.Adam(0.0005), "categorical_crossentropy", metrics=["accuracy"]
-# )
-# tensorboard_callback = tf.keras.callbacks.TensorBoard(
-#     log_dir=".tensorboard", histogram_freq=1
-# )
-# history_pretrained = pretrained.fit(
-#     x_train,
-#     y_train,
-#     validation_data=(x_test, y_test),
-#     epochs=15,
-#     batch_size=32,
-#     callbacks=[tensorboard_callback],
-# )
+# put a classification head on it
+gmp = tf.keras.layers.GlobalMaxPool1D()
+d = tf.keras.layers.Dense(4)
+out = tf.keras.layers.Activation("softmax", dtype="float32")
+pretrained = tf.keras.Model(composed2.model.input, out(d(gmp(composed2.model.output))))
+pretrained.compile(
+    tf.keras.optimizers.Adam(0.0005), "categorical_crossentropy", metrics=["accuracy"]
+)
+tensorboard_callback = tf.keras.callbacks.TensorBoard(
+    log_dir=".tensorboard", histogram_freq=1
+)
+history_pretrained = pretrained.fit(
+    x_train,
+    y_train,
+    validation_data=(x_test, y_test),
+    epochs=15,
+    batch_size=32,
+    callbacks=[tensorboard_callback],
+)
