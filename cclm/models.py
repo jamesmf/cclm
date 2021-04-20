@@ -1,8 +1,8 @@
-from typing import List
+from typing import Any, Generator, List, Dict
 import numpy as np
 import json
 import os
-from .preprocessing import MLMPreprocessor
+from .preprocessing import Preprocessor
 import tensorflow as tf
 from tensorflow.keras.mixed_precision import experimental as mixed_precision
 
@@ -13,7 +13,7 @@ mixed_precision.set_policy(policy)
 DEFAULT_EMB_DIM = 128
 
 
-def zero_out_zero_embedding(model):
+def zero_out_zero_embedding(model: tf.keras.Model):
     emb_layers = [l for l in model.layers if l.name.find("embedding") > -1]
     for layer in model.layers:
         if isinstance(layer, tf.keras.layers.Embedding):
@@ -23,7 +23,15 @@ def zero_out_zero_embedding(model):
             layer.set_weights(w)
 
 
-def get_character_embedder(max_len, char_emb_size, n_chars, filters, prefix):
+def get_character_embedder(
+    max_len: int, char_emb_size: int, n_chars: int, filters: int, prefix: str
+) -> tf.keras.Model:
+    """
+    Return a basic model that embeds character-level input and passes it through conv
+    layers that don't change its length.
+
+    TODO: make this into a class so it's more obvious how to write your own
+    """
     inp = tf.keras.layers.Input((max_len,), name=f"{prefix}_inp")
     char_emb = tf.keras.layers.Embedding(
         n_chars,
@@ -33,39 +41,36 @@ def get_character_embedder(max_len, char_emb_size, n_chars, filters, prefix):
     char_conv_1 = tf.keras.layers.Conv1D(
         filters,
         3,
-        activation="relu",
+        activation=tf.keras.layers.LeakyReLU(alpha=0.1),
         name=f"{prefix}_c1",
         padding="same",
     )
     char_conv_2 = tf.keras.layers.Conv1D(
         filters,
         3,
-        activation="relu",
+        activation=tf.keras.layers.LeakyReLU(alpha=0.1),
         name=f"{prefix}_c2",
         padding="same",
     )
     char_conv_3 = tf.keras.layers.Conv1D(
         filters,
         3,
-        activation="relu",
+        activation=tf.keras.layers.LeakyReLU(alpha=0.1),
         name=f"{prefix}_c3",
-        dilation_rate=2,
         padding="same",
     )
     char_conv_4 = tf.keras.layers.Conv1D(
         filters,
         3,
-        activation="tanh",
+        activation=tf.keras.layers.LeakyReLU(alpha=0.1),
         name=f"{prefix}_c4",
-        dilation_rate=3,
         padding="same",
     )
     char_conv_5 = tf.keras.layers.Conv1D(
         4 * filters,
         3,
-        activation="tanh",
+        activation=tf.keras.layers.LeakyReLU(alpha=0.1),
         name=f"{prefix}_c5",
-        dilation_rate=3,
         padding="same",
     )
     x = char_emb(inp)
@@ -107,23 +112,19 @@ class CCLMModelBase:
             )
             self.embedder = tf.keras.Model(emb_in, emb_out)
 
-    def save(self, path):
+    def save(self, path: str):
         """
         Use keras to save the model and its preprocessor
         """
         self.embedder.save(path)
 
     def freeze_embedder(self):
-        for layer in self.embedder.layers:
-            if hasattr(layer, "trainable"):
-                layer.trainable = False
+        self.embedder.trainable = False
 
     def unfreeze_embedder(self):
-        for layer in self.embedder.layers:
-            if hasattr(layer, "trainable"):
-                layer.trainable = True
+        self.embedder.trainable = True
 
-    def _load(self, path, pool=False):
+    def _load(self, path: str, pool: bool = False):
         """
         Load a model and its preprocessor
         """
@@ -137,7 +138,7 @@ class CCLMModelBase:
         if pool:
             emb_out = tf.keras.layers.GlobalMaxPooling1D(name="context_gmp")(emb_out)
         self.embedder = tf.keras.Model(emb_in, emb_out)
-        loaded_model = load_model(path)
+        loaded_model = tf.keras.models.load_model(path)
         loaded_model.compile("Adam", "binary_crossentropy")
         print([layer.name for layer in loaded_model.layers])
         for layer in loaded_model.layers[:-1]:
@@ -152,17 +153,18 @@ class CCLMModelBase:
                 print(f"unable to transfer weights for {layer.name}")
 
 
-def rev(prep, a):
+def rev(prep: Preprocessor, a: str):
     return "".join([prep.char_rev[int(c)] for c in a])
 
 
 class PrinterCallback(tf.keras.callbacks.Callback):
-    def __init__(self, gen, prep):
+    def __init__(self, gen: Generator, prep: Preprocessor):
         super().__init__()
         self.gen = gen
         self.prep = prep
 
-    def on_epoch_end(self, epoch, logs):
+    def on_epoch_end(self, epoch: int, logs: Dict[str, Any]):
+        j = 0
         ex = next(self.gen)
         sourceex = ex[0][0]
         print("*" * 80)
@@ -270,7 +272,10 @@ class TransformerBlock(tf.keras.layers.Layer):
 
 class ComposedModel(tf.keras.layers.Layer):
     def __init__(
-        self, base: CCLMModelBase, models: List[tf.keras.Model], name="composed_model"
+        self,
+        base: CCLMModelBase,
+        models: List[tf.keras.Model],
+        name: str = "composed_model",
     ):
         """
         Holds a set of pretrained models that share a base. When called, it will

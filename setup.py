@@ -17,12 +17,11 @@ setup(
         "License :: OSI Approved :: BSD License",
     ],
     install_requires=[
-        "tokenizers==0.10.0",
-        "datasets==1.1.3",
-        "tensorflow-gpu==2.3.1",
-        "numpy==1.18.5",
-        "tqdm==4.49.0",
-        "pytest==6.1.1",
-        "keras==2.4.3",
+        "tokenizers",
+        "datasets",
+        "tensorflow-gpu",
+        "numpy",
+        "tqdm",
+        "pytest",
     ],
 )
