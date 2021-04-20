@@ -1,7 +1,7 @@
 import pytest
 from tensorflow.python.keras.engine import training
-from cclm.pretraining import MaskedLanguagePretrainer
-from cclm.preprocessing import MLMPreprocessor
+from cclm.pretrainers import MaskedLanguagePretrainer
+from cclm.preprocessing import Preprocessor
 from cclm.models import CCLMModelBase
 import numpy as np
 import tensorflow as tf
@@ -37,7 +37,7 @@ CORPUS = [
 
 
 def test_fit():
-    prep = MLMPreprocessor(max_example_len=10)
+    prep = Preprocessor(max_example_len=10)
     prep.fit(CORPUS)
     base = CCLMModelBase(preprocessor=prep)
     mlp = MaskedLanguagePretrainer(
@@ -123,7 +123,7 @@ def test_fit():
 def test_get_substr_short():
     test_str = "hello"
 
-    prep = MLMPreprocessor(max_example_len=10)
+    prep = Preprocessor(max_example_len=10)
     prep.fit(CORPUS)
     base = CCLMModelBase(preprocessor=prep)
     mlp = MaskedLanguagePretrainer(base=base)
@@ -135,7 +135,7 @@ def test_get_substr_short():
 def test_get_substr_long():
     test_str = "hello i am a string longer than 10 characters"
     set_seed()
-    prep = MLMPreprocessor(max_example_len=10)
+    prep = Preprocessor(max_example_len=10)
     prep.fit(CORPUS)
     base = CCLMModelBase(preprocessor=prep)
     mlp = MaskedLanguagePretrainer(base=base)
@@ -145,7 +145,7 @@ def test_get_substr_long():
 def test_batch_from_strs():
     set_seed()
 
-    prep = MLMPreprocessor(max_example_len=16)
+    prep = Preprocessor(max_example_len=16)
     prep.fit(CORPUS)
     base = CCLMModelBase(preprocessor=prep)
     mlp = MaskedLanguagePretrainer(base=base)

@@ -1,5 +1,5 @@
 import pytest
-from cclm.preprocessing import MLMPreprocessor
+from cclm.preprocessing import Preprocessor
 
 CORPUS = [
     "hello i am a test string",
@@ -11,7 +11,7 @@ CORPUS = [
 
 
 def test_prep_encode_string():
-    prep = MLMPreprocessor(max_example_len=10)
+    prep = Preprocessor(max_example_len=10)
     prep.fit(CORPUS)
     my_string = CORPUS[0]
     example = prep.string_to_array(my_string, 5)
@@ -22,7 +22,7 @@ def test_prep_encode_string():
 
 
 def test_prep_fit_char_dict():
-    prep = MLMPreprocessor()
+    prep = Preprocessor()
     prep.fit(["a a", "b a"], min_char_freq=2)
     print(prep.char_dict)
     assert "a" in prep.char_dict, "char dict not fit properly"
@@ -31,15 +31,15 @@ def test_prep_fit_char_dict():
 
 def test_save_load(tmp_path):
     mel = 21
-    p = MLMPreprocessor(max_example_len=mel)
+    p = Preprocessor(max_example_len=mel)
     p.save(tmp_path)
     saved = tmp_path / "cclm_config.json"
-    p2 = MLMPreprocessor(load_from=saved)
+    p2 = Preprocessor(load_from=saved)
     assert p2.max_example_len == mel
 
 
 def test_default_tokenizer_behavior(tmp_path):
-    p = MLMPreprocessor()
+    p = Preprocessor()
     p.fit(CORPUS)
     assert (
         "string" in p.tokenizer.get_vocab()

@@ -1,62 +1,9 @@
 from typing import List, Tuple
-import numpy as np
 import tensorflow as tf
-from .models import CCLMModelBase, TransformerBlock
-from .preprocessing import MLMPreprocessor
-
-
-class Pretrainer:
-    """
-    A pretrainer needs to accept a base, implement some core layers that it
-    will fit (in addition to the base, optionally), and implement a top to the
-    network that represents its specific task.
-    """
-
-    def __init__(
-        self,
-        base=None,
-        task_name="pretraining",
-        load_from: str = None,
-        base_args={},
-        **kwargs,
-    ):
-        if load_from:
-            self.model = tf.keras.models.load_model(load_from)
-        else:
-            self.model = self.get_model()
-        if base is None:
-            base = CCLMModelBase(**base_args)
-        self.base = base
-        self.task_name = task_name
-
-    def get_model(self, *args, **kwargs):
-        """
-        This should return a Model that accepts input with the shape of a `base` and
-        produces output of the same shape.
-        """
-
-    def compile(self, *args, **kwargs):
-        self.model.compile(*args, **kwargs)
-
-    def save_model(self, path: str):
-        self.model.save(path)
-
-    def freeze(self):
-        """
-        Make the layers in the model not trainable. Useful when first combining pretrained models
-        with randomly initialized layers
-        """
-        for layer in self.model.layers:
-            if hasattr(layer, "trainable"):
-                layer.trainable = False
-
-    def unfreeze(self):
-        """
-        Make the layers in the model not trainable.
-        """
-        for layer in self.model.layers:
-            if hasattr(layer, "trainable"):
-                layer.trainable = True
+import numpy as np
+from ..models import CCLMModelBase, TransformerBlock
+from ..preprocessing import Preprocessor
+from .base import Pretrainer
 
 
 class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
@@ -84,7 +31,7 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
         also match the stride_len for simplicity
         """
         tf.keras.Model.__init__(self)
-        self.preprocessor = kwargs.get("preprocessor", MLMPreprocessor())
+        self.preprocessor = kwargs.get("preprocessor", Preprocessor())
         base = kwargs.get("base")
         if base:
             self.preprocessor = base.preprocessor

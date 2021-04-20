@@ -1,2 +1,2 @@
-from .preprocessing import MLMPreprocessor
+from .preprocessing import Preprocessor
 from .models import CCLMModelBase

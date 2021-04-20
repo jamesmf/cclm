@@ -1,6 +1,6 @@
 from tqdm import tqdm
 import numpy as np
-from tokenizers import BertWordPieceTokenizer, Encoding, Tokenizer
+from tokenizers import Encoding, Tokenizer
 from tokenizers.models import BPE
 from tokenizers.trainers import BpeTrainer
 from tokenizers.pre_tokenizers import Whitespace
@@ -15,7 +15,7 @@ from typing import Dict, List, Iterable
 PUNCT = "~!@#$%^&*()-+=_.,?\":;'"
 
 
-class MLMPreprocessor:
+class Preprocessor:
     def __init__(
         self,
         load_from: str = None,

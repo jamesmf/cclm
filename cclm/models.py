@@ -2,7 +2,7 @@ from typing import Any, Generator, List, Dict
 import numpy as np
 import json
 import os
-from .preprocessing import MLMPreprocessor
+from .preprocessing import Preprocessor
 import tensorflow as tf
 from tensorflow.keras.mixed_precision import experimental as mixed_precision
 
@@ -153,12 +153,12 @@ class CCLMModelBase:
                 print(f"unable to transfer weights for {layer.name}")
 
 
-def rev(prep: MLMPreprocessor, a: str):
+def rev(prep: Preprocessor, a: str):
     return "".join([prep.char_rev[int(c)] for c in a])
 
 
 class PrinterCallback(tf.keras.callbacks.Callback):
-    def __init__(self, gen: Generator, prep: MLMPreprocessor):
+    def __init__(self, gen: Generator, prep: Preprocessor):
         super().__init__()
         self.gen = gen
         self.prep = prep
