@@ -74,6 +74,7 @@ def get_character_embedder(
         padding="same",
     )
     x = char_emb(inp)
+    x = tf.keras.layers.SpatialDropout1D(0.1)(x)
     cc1 = char_conv_1(x)
     x = tf.keras.layers.Dropout(0.25)(cc1)
     x = char_conv_2(x)

@@ -3,7 +3,7 @@ import tensorflow as tf
 import numpy as np
 from ..models import CCLMModelBase, TransformerBlock
 from ..preprocessing import Preprocessor
-from .base import Pretrainer
+from .core import Pretrainer
 
 
 class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
