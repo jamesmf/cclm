@@ -1,5 +1,7 @@
 from typing import List
 import tensorflow as tf
+import numpy as np
+from ..preprocessing import Preprocessor
 from ..models import CCLMModelBase, TransformerBlock
 
 
@@ -18,13 +20,18 @@ class Pretrainer:
         base_args={},
         **kwargs,
     ):
+        if base:
+            self.preprocessor = base.preprocessor
+        else:
+            self.preprocessor = kwargs.get("preprocessor", Preprocessor())
+
+        if base is None:
+            base = CCLMModelBase(**base_args)
+        self.base = base
         if load_from:
             self.model = tf.keras.models.load_model(load_from)
         else:
             self.model = self.get_model()
-        if base is None:
-            base = CCLMModelBase(**base_args)
-        self.base = base
         self.task_name = task_name
 
     def get_model(self, *args, **kwargs):
@@ -51,3 +58,14 @@ class Pretrainer:
         Make the layers in the model not trainable.
         """
         self.model.trainable = True
+
+    def get_substr(self, inp: str) -> str:
+        """
+        Return a substring that is an appropriate length
+        """
+        max_len = self.preprocessor.max_example_len
+        inp_len = len(inp)
+        if inp_len <= max_len:
+            return inp
+        start = np.random.randint(0, inp_len - max_len)
+        return inp[start : start + max_len]

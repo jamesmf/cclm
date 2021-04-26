@@ -1,2 +1,2 @@
 from .masked_language_modeling import MaskedLanguagePretrainer
-from .base import Pretrainer
+from .core import Pretrainer
