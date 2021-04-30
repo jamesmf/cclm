@@ -20,6 +20,7 @@ ap.add_argument(
     "--min-char",
     help="minimum number of times a character needs to appear to be part of the preprocessor",
     dest="min_char",
+    default=200,
     type=int,
 )
 args = ap.parse_args()
@@ -57,7 +58,7 @@ if args.load:
     bp.model = tf.keras.models.load_model(os.path.join(args.load, "model"))
 
 bp.model.compile(
-    tf.keras.optimizers.Adam(lr=0.0005),
+    tf.keras.optimizers.Adam(lr=0.0002),
     tf.keras.losses.SparseCategoricalCrossentropy(),
 )
 gen = bp.generator(dataset)
