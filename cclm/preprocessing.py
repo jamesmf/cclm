@@ -5,7 +5,8 @@ from tokenizers.models import BPE
 from tokenizers.trainers import BpeTrainer
 from tokenizers.pre_tokenizers import Whitespace
 from tokenizers.normalizers import Lowercase, NFD, StripAccents, Sequence
-from typing import List
+from typing import List, Union
+from datasets.arrow_dataset import Dataset
 import json
 import os
 import re
@@ -24,6 +25,7 @@ class Preprocessor:
         batch_size: int = 16,
         num_stopwords: int = 250,
         mask_output_len: int = 4,
+        mask_token_ind: int = 1,
     ):
         self.char_dict: Dict[str, int] = {}
         self.char_rev: Dict[int, str] = {}
@@ -34,7 +36,8 @@ class Preprocessor:
         self.batch_size = batch_size
         self.num_stopwords = num_stopwords
         self.mask_output_len = mask_output_len
-        self.tokenizer_fit = False
+        self.mask_token_ind = mask_token_ind
+        self.tokenizer_is_fit = False
         self.tokenizer = Tokenizer(BPE(unk_token="[UNK]"))
         self.tokenizer.pre_tokenizer = Whitespace()
         self.tokenizer.normalizer = Sequence([NFD(), Lowercase(), StripAccents()])
@@ -44,20 +47,32 @@ class Preprocessor:
         if load_from:
             self._load(load_from)
 
-    def fit(self, data: List[str], min_char_freq: int = 1, progbar: bool = True):
+    def fit(
+        self,
+        data: Union[List[str], Dataset],
+        min_char_count: int = 1,
+        skip_tokenizer: bool = False,
+        progbar: bool = True,
+    ):
         """
         Create a character-level dictionary based on a list of strings and train
         the tokenizer on the dataset. Training the tokenizer allows for using it
         in the language modeling objective
         """
-        if not self.tokenizer_fit:
+        is_dataset = isinstance(data, Dataset)
+        if not self.tokenizer_is_fit and not skip_tokenizer:
+            print("fitting tokenizer")
             self.tokenizer.train_from_iterator(data, trainer=self.tok_trainer)
+            self.tokenizer_is_fit = True
         char_counter: Counter = Counter()
         token_counter: Counter = Counter()
         iterator_: Iterable = data
         if progbar:
             iterator_ = tqdm(data)
+        print("fitting char_dict")
         for example in iterator_:
+            if is_dataset:
+                example = example["text"]
             chars = Counter(example)
             for char, char_count in chars.items():
                 try:
@@ -65,7 +80,7 @@ class Preprocessor:
                 except KeyError:
                     char_counter[char] = char_count
 
-        counts = [k for k, v in char_counter.items() if v >= min_char_freq]
+        counts = [k for k, v in char_counter.items() if v >= min_char_count]
         self.char_rev = {0: "", 1: "?", 2: "?", 3: ""}
 
         for c in sorted(counts):
@@ -117,3 +132,5 @@ class Preprocessor:
             result = json.load(f)
         for key, value in result.items():
             setattr(self, key, value)
+        for key, value in list(self.char_rev.items()):
+            self.char_rev[int(key)] = value
