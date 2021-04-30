@@ -23,6 +23,13 @@ ap.add_argument(
     default=200,
     type=int,
 )
+ap.add_argument(
+    "--lr",
+    help="learning rate",
+    dest="lr",
+    default=0.0002,
+    type=float,
+)
 args = ap.parse_args()
 
 mlflow.log_params(vars(args))
@@ -58,7 +65,7 @@ if args.load:
     bp.model = tf.keras.models.load_model(os.path.join(args.load, "model"))
 
 bp.model.compile(
-    tf.keras.optimizers.Adam(lr=0.0002),
+    tf.keras.optimizers.Adam(lr=args.lr),
     tf.keras.losses.SparseCategoricalCrossentropy(),
 )
 gen = bp.generator(dataset)
