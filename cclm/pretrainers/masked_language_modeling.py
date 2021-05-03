@@ -3,7 +3,7 @@ import tensorflow as tf
 import numpy as np
 from ..models import CCLMModelBase, TransformerBlock
 from ..preprocessing import Preprocessor
-from .base import Pretrainer
+from .core import Pretrainer
 
 
 class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
@@ -31,10 +31,6 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
         also match the stride_len for simplicity
         """
         tf.keras.Model.__init__(self)
-        self.preprocessor = kwargs.get("preprocessor", Preprocessor())
-        base = kwargs.get("base")
-        if base:
-            self.preprocessor = base.preprocessor
         self.n_strided_convs = n_strided_convs
         self.downsample_factor = downsample_factor
         self.training_pool_mode = training_pool_mode
@@ -236,17 +232,6 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
         loss, preds = self.train_batch(x_char, x_token, y_true, mask)
         self.compiled_metrics.update_state(y_true, preds)
         return {m.name: m.result() for m in self.metrics}
-
-    def get_substr(self, inp: str) -> str:
-        """
-        Return a substring that is an appropriate length
-        """
-        max_len = self.preprocessor.max_example_len
-        inp_len = len(inp)
-        if inp_len <= max_len:
-            return inp
-        start = np.random.randint(0, inp_len - max_len)
-        return inp[start : start + max_len]
 
     def account_for_downsample(self, inp_len: int) -> int:
         """

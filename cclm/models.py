@@ -13,6 +13,21 @@ mixed_precision.set_policy(policy)
 DEFAULT_EMB_DIM = 128
 
 
+class GlobalBroadcaster1D(tf.keras.layers.Layer):
+    def __init__(self, dim: int):
+        super().__init__()
+        self.pooler = tf.keras.layers.GlobalMaxPool1D()
+        self.reshaper = tf.keras.layers.Reshape((1, -1))
+        self.dense = tf.keras.layers.Dense(dim, activation="relu")
+        self.cat = tf.keras.layers.Concatenate()
+
+    def call(self, inputs, training):
+        # globally pool and broadcast back
+        side = self.reshaper(self.pooler(inputs))
+        side = tf.repeat(self.dense(side), tf.shape(inputs)[1], axis=1)
+        return self.cat([inputs, side])
+
+
 def zero_out_zero_embedding(model: tf.keras.Model):
     emb_layers = [l for l in model.layers if l.name.find("embedding") > -1]
     for layer in model.layers:
@@ -24,11 +39,19 @@ def zero_out_zero_embedding(model: tf.keras.Model):
 
 
 def get_character_embedder(
-    max_len: int, char_emb_size: int, n_chars: int, filters: int, prefix: str
+    max_len: int,
+    char_emb_size: int,
+    n_chars: int,
+    filters: int,
+    prefix: str,
+    global_filters: int = 64,
 ) -> tf.keras.Model:
     """
     Return a basic model that embeds character-level input and passes it through conv
     layers that don't change its length.
+
+    Also aggregated sequence-level info by pooling then multiplying to make global information
+    available in lower levels
 
     TODO: make this into a class so it's more obvious how to write your own
     """
@@ -73,16 +96,22 @@ def get_character_embedder(
         name=f"{prefix}_c5",
         padding="same",
     )
+    broadcaster_1 = GlobalBroadcaster1D(64)
+    broadcaster_2 = GlobalBroadcaster1D(64)
+
+    # initial input and conv
     x = char_emb(inp)
     cc1 = char_conv_1(x)
     x = tf.keras.layers.Dropout(0.25)(cc1)
     x = char_conv_2(x)
+    x = broadcaster_1(x)
     x = char_conv_3(x)
     r1 = tf.keras.layers.Add(name=f"{prefix}_res_conn")([cc1, x])
     x = tf.keras.layers.Dropout(0.25)(x)
     x = char_conv_4(x)
     r2 = tf.keras.layers.Add(name=f"{prefix}_res_conn_2")([r1, x])
-    x = char_conv_5(r2)
+    x = broadcaster_2(r2)
+    x = char_conv_5(x)
     return inp, x
 
 
