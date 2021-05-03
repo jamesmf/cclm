@@ -5,14 +5,15 @@ vs
 - the same two models once pretrained
 
 """
+import os
+import argparse
 from cclm.pretraining import MaskedLanguagePretrainer
-from cclm.preprocessing import MLMPreprocessor
+from cclm.preprocessing import Preprocessor
 from cclm.models import CCLMModelBase, ComposedModel
 from datasets import load_dataset
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.mixed_precision import experimental as mixed_precision
-import argparse
 import mlflow
 
 ap = argparse.ArgumentParser()
@@ -30,6 +31,12 @@ ap.add_argument(
     help="whether to pretrain on another dataset",
 )
 ap.add_argument("--lr", dest="lr", help="learning rate", type=float, default=0.001)
+ap.add_argument(
+    "--load-base",
+    dest="load_base",
+    help="path to pretrained base and pretrainer",
+    type=str,
+)
 args = ap.parse_args()
 
 mlflow.set_tracking_uri("sqlite:///tracking.db")
@@ -52,8 +59,13 @@ y_train = tf.keras.utils.to_categorical(dataset["train"]["label"])
 y_test = tf.keras.utils.to_categorical(dataset["test"]["label"])
 
 # create the preprocessor and fit it on the training set
-prep = MLMPreprocessor(max_example_len=128, vocab_size=10000)
-prep.fit(dataset_train)
+if args.load_base is None:
+    prep = Preprocessor(max_example_len=128, vocab_size=10000)
+    prep.fit(dataset_train)
+else:
+    prep = Preprocessor()
+    prep._load(args.load_base)
+
 
 x_train = np.array(
     [prep.string_to_array(i, prep.max_example_len) for i in dataset_train]
@@ -61,7 +73,11 @@ x_train = np.array(
 x_test = np.array([prep.string_to_array(i, prep.max_example_len) for i in dataset_test])
 
 # create a base that embeds the input
-base = CCLMModelBase(preprocessor=prep)
+if args.load_base is None:
+    base = CCLMModelBase(preprocessor=prep)
+else:
+    base = CCLMModelBase(preprocessor=prep)
+    base.embedder = tf.keras.models.load_model(os.path.join(args.load_base, "embedder"))
 
 # create two models that we'll combine - optionally we can pretrain one or more of them
 
