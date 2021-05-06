@@ -38,11 +38,53 @@ def zero_out_zero_embedding(model: tf.keras.Model):
             layer.set_weights(w)
 
 
+def get_block(
+    x: tf.Tensor,
+    n_filters: int,
+    filter_len: int,
+    global_filters: int,
+    prefix: str,
+    suffix: str,
+):
+    """
+    Add a block of layers on top of input tensor
+    """
+    char_conv_1 = tf.keras.layers.Conv1D(
+        n_filters,
+        filter_len,
+        activation=tf.keras.layers.LeakyReLU(alpha=0.1),
+        name=f"{prefix}_conv_{suffix}_1",
+        padding="same",
+    )
+    char_conv_2 = tf.keras.layers.Conv1D(
+        n_filters,
+        filter_len,
+        activation=tf.keras.layers.LeakyReLU(alpha=0.1),
+        name=f"{prefix}_conv_{suffix}_2",
+        padding="same",
+    )
+    char_conv_3 = tf.keras.layers.Conv1D(
+        n_filters,
+        filter_len,
+        activation=tf.keras.layers.LeakyReLU(alpha=0.1),
+        name=f"{prefix}_conv_{suffix}_3",
+        padding="same",
+    )
+    broadcaster_1 = GlobalBroadcaster1D(global_filters)
+    cc1 = char_conv_1(x)
+    x = tf.keras.layers.Dropout(0.25)(cc1)
+    x = char_conv_2(x)
+    x = broadcaster_1(x)
+    x = char_conv_3(x)
+    return tf.keras.layers.Add(name=f"{prefix}_res_{suffix}")([cc1, x])
+
+
 def get_character_embedder(
     max_len: int,
     char_emb_size: int,
+    n_blocks: int,
     n_chars: int,
-    filters: int,
+    n_filters: int,
     prefix: str,
     global_filters: int = 64,
 ) -> tf.keras.Model:
@@ -61,57 +103,66 @@ def get_character_embedder(
         char_emb_size,
         name=f"{prefix}_embedding",
     )
-    char_conv_1 = tf.keras.layers.Conv1D(
-        filters,
-        3,
-        activation=tf.keras.layers.LeakyReLU(alpha=0.1),
-        name=f"{prefix}_c1",
-        padding="same",
-    )
-    char_conv_2 = tf.keras.layers.Conv1D(
-        filters,
-        3,
-        activation=tf.keras.layers.LeakyReLU(alpha=0.1),
-        name=f"{prefix}_c2",
-        padding="same",
-    )
-    char_conv_3 = tf.keras.layers.Conv1D(
-        filters,
-        3,
-        activation=tf.keras.layers.LeakyReLU(alpha=0.1),
-        name=f"{prefix}_c3",
-        padding="same",
-    )
-    char_conv_4 = tf.keras.layers.Conv1D(
-        filters,
-        3,
-        activation=tf.keras.layers.LeakyReLU(alpha=0.1),
-        name=f"{prefix}_c4",
-        padding="same",
-    )
-    char_conv_5 = tf.keras.layers.Conv1D(
-        4 * filters,
-        3,
-        activation=tf.keras.layers.LeakyReLU(alpha=0.1),
-        name=f"{prefix}_c5",
-        padding="same",
-    )
-    broadcaster_1 = GlobalBroadcaster1D(64)
-    broadcaster_2 = GlobalBroadcaster1D(64)
+    # char_conv_1 = tf.keras.layers.Conv1D(
+    #     filters,
+    #     3,
+    #     activation=tf.keras.layers.LeakyReLU(alpha=0.1),
+    #     name=f"{prefix}_c1",
+    #     padding="same",
+    # )
+    # char_conv_2 = tf.keras.layers.Conv1D(
+    #     filters,
+    #     3,
+    #     activation=tf.keras.layers.LeakyReLU(alpha=0.1),
+    #     name=f"{prefix}_c2",
+    #     padding="same",
+    # )
+    # char_conv_3 = tf.keras.layers.Conv1D(
+    #     filters,
+    #     3,
+    #     activation=tf.keras.layers.LeakyReLU(alpha=0.1),
+    #     name=f"{prefix}_c3",
+    #     padding="same",
+    # )
+    # char_conv_4 = tf.keras.layers.Conv1D(
+    #     filters,
+    #     3,
+    #     activation=tf.keras.layers.LeakyReLU(alpha=0.1),
+    #     name=f"{prefix}_c4",
+    #     padding="same",
+    # )
+    # char_conv_5 = tf.keras.layers.Conv1D(
+    #     4 * filters,
+    #     3,
+    #     activation=tf.keras.layers.LeakyReLU(alpha=0.1),
+    #     name=f"{prefix}_c5",
+    #     padding="same",
+    # )
+    # broadcaster_1 = GlobalBroadcaster1D(64)
+    # broadcaster_2 = GlobalBroadcaster1D(64)
 
     # initial input and conv
     x = char_emb(inp)
-    cc1 = char_conv_1(x)
-    x = tf.keras.layers.Dropout(0.25)(cc1)
-    x = char_conv_2(x)
-    x = broadcaster_1(x)
-    x = char_conv_3(x)
-    r1 = tf.keras.layers.Add(name=f"{prefix}_res_conn")([cc1, x])
-    x = tf.keras.layers.Dropout(0.25)(x)
-    x = char_conv_4(x)
-    r2 = tf.keras.layers.Add(name=f"{prefix}_res_conn_2")([r1, x])
-    x = broadcaster_2(r2)
-    x = char_conv_5(x)
+    # cc1 = char_conv_1(x)
+    # x = tf.keras.layers.Dropout(0.25)(cc1)
+    # x = char_conv_2(x)
+    # x = broadcaster_1(x)
+    # x = char_conv_3(x)
+    # r1 = tf.keras.layers.Add(name=f"{prefix}_res_conn")([cc1, x])
+    # x = tf.keras.layers.Dropout(0.25)(x)
+    # x = char_conv_4(x)
+    # r2 = tf.keras.layers.Add(name=f"{prefix}_res_conn_2")([r1, x])
+    # x = broadcaster_2(r2)
+    # x = char_conv_5(x)
+    for n in range(n_blocks):
+        x = get_block(
+            x,
+            n_filters,
+            3,
+            global_filters,
+            prefix,
+            str(n),
+        )
     return inp, x
 
 
@@ -135,6 +186,7 @@ class CCLMModelBase:
             emb_in, emb_out = get_character_embedder(
                 self.preprocessor.max_example_len,
                 char_emb_size,
+                2,
                 np.max(list(self.preprocessor.char_dict.values())) + 1,
                 n_filters,
                 prefix,
@@ -160,6 +212,7 @@ class CCLMModelBase:
         emb_in, emb_out = get_character_embedder(
             self.preprocessor.max_example_len,
             self.char_emb_size,
+            2,
             np.max(list(self.preprocessor.char_dict.values())),
             self.n_filters,
             self.prefix,

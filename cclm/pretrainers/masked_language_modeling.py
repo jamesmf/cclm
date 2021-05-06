@@ -48,6 +48,8 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
 
         self.train_base = train_base
 
+        Pretrainer.__init__(self, *args, **kwargs)
+
         # initialize output weights for the sampled softmax or nce loss
         self.output_weights = tf.Variable(
             tf.random.normal(
@@ -68,7 +70,6 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
         self.output_embedding = tf.keras.layers.Embedding(
             self.preprocessor.tokenizer.get_vocab_size() + 1, self.n_conv_filters
         )
-        Pretrainer.__init__(self, *args, **kwargs)
         self.pretraining_model = self.get_pretraining_model()
 
     def get_model(
