@@ -27,7 +27,7 @@ ap.add_argument(
     "--lr",
     help="learning rate",
     dest="lr",
-    default=0.0002,
+    default=0.00005,
     type=float,
 )
 args = ap.parse_args()
@@ -69,6 +69,7 @@ bp.model.compile(
     tf.keras.losses.SparseCategoricalCrossentropy(),
 )
 gen = bp.generator(dataset)
+print(bp.model.summary())
 
 callbacks = [
     BasePretrainerEvaluationCallback(dataset, bp),
