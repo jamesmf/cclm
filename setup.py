@@ -1,5 +1,5 @@
 import os
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name="cclm",
@@ -7,10 +7,10 @@ setup(
     author="jamesmf",
     author_email="",
     description=("composable character level models"),
-    license="BSD",
+    license="MIT",
     keywords="embeddings composable character-level",
     url="",
-    packages=["cclm"],
+    packages=find_packages(),
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Topic :: Utilities",
@@ -19,7 +19,7 @@ setup(
     install_requires=[
         "tokenizers",
         "datasets",
-        "tensorflow-gpu",
+        "tensorflow",
         "numpy",
         "tqdm",
         "pytest",

@@ -1,2 +1,14 @@
+*__pycache__*
+*.pyc
+*.pytest_cache*
+*.vscode*
+*egg-info*
 .models/*
 .datasets/*
+0/*
+tracking.db
+mlruns/*
+dist/*
+.tensorboard/*
+.mypye_cache/*
+build/*
