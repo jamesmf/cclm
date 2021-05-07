@@ -5,7 +5,9 @@ description = "NLP framework for composing together models modularly"
 authors = ["jamesmf"]
 license = "MIT"
 homepage = "https://github.com/jamesmf/cclm"
-keywords = "nlp, modular, embedding, composable"
+repository = "https://github.com/jamesmf/cclm"
+keywords = ["nlp", "modular", "embedding", "composable"]
+readme = "readme.md"
 
 [tool.poetry.dependencies]
 python = "^3.6"

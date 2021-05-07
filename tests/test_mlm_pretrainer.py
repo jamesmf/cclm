@@ -61,65 +61,6 @@ def test_fit():
     assert True, "error in MLMPreprocessor.fit()"
 
 
-# def test_pretraining_model():
-#     prep = MLMPreprocessor(max_example_len=10)
-#     prep.fit(CORPUS)
-#     base = CCLMModelBase(preprocessor=prep)
-#     mlp = MaskedLanguagePretrainer(
-#         base=base,
-#         stride_len=1,
-#         downsample_factor=1,
-#         n_strided_convs=2,
-#         training_pool_mode="global",
-#     )
-#     gen = mlp.generator(CORPUS, batch_size=2)
-#     x, y = next(gen)
-#     xc, xs, m = x
-#     sm = mlp.pretraining_model
-#     sm.compile("adam", "binary_crossentropy")
-#     print(sm.summary())
-#     sm.fit(gen, epochs=1, steps_per_epoch=2)
-#     assert True, "error in MLMPreprocessor.fit()"
-
-
-# def test_freeze():
-#     prep = MLMPreprocessor(max_example_len=10)
-#     prep.fit(CORPUS)
-#     base = CCLMModelBase(preprocessor=prep)
-#     mlp = MaskedLanguagePretrainer(base=base)
-#     mlp.fit(CORPUS, epochs=1, batch_size=2)
-
-#     mlp.freeze()
-#     mean = np.mean(
-#         [np.mean(i[0]) for i in mlp.model.get_weights() if isinstance(i[0], np.ndarray)]
-#     )
-#     print(mean)
-#     mlp.fit(CORPUS, epochs=1)
-#     mean_new = np.mean(
-#         [np.mean(i[0]) for i in mlp.model.get_weights() if isinstance(i[0], np.ndarray)]
-#     )
-#     assert mean == mean_new, "freeze did not work, weights changed"
-
-
-# def test_unfreeze():
-#     prep = MLMPreprocessor(max_example_len=10)
-#     prep.fit(CORPUS)
-#     base = CCLMModelBase(preprocessor=prep)
-#     mlp = MaskedLanguagePretrainer(base=base)
-#     mlp.fit(CORPUS, epochs=1, batch_size=2)  # fit easy way to build model weights
-
-#     mean = np.mean(
-#         [np.mean(i[0]) for i in mlp.model.get_weights() if isinstance(i[0], np.ndarray)]
-#     )
-#     print(mean)
-#     mlp.fit(CORPUS, epochs=1)
-#     mlp.fit(CORPUS, epochs=5, print_interval=1)
-#     mean_new = np.mean(
-#         [np.mean(i[0]) for i in mlp.model.get_weights() if isinstance(i[0], np.ndarray)]
-#     )
-#     assert mean != mean_new, "unfreeze did not work, weights remained the same"
-
-
 def test_get_substr_short():
     test_str = "hello"
 
@@ -158,14 +99,3 @@ def test_batch_from_strs():
     assert spans[0][1] == 13, "unexpected token end index"
     assert spans[0][2] == "test", "unexpected masked value"
     assert outs[0] == 36, "unexpected return index"
-
-
-# def test_batch_output_index_matches_inp_str():
-#     set_seed()
-
-#     prep = MLMPreprocessor(max_example_len=16)
-#     prep.fit(CORPUS)
-#     base = CCLMModelBase(preprocessor=prep)
-#     mlp = MaskedLanguagePretrainer(base=base)
-#     inps, spans, outs = mlp.batch_from_strs(CORPUS)
-#     output = outs[0]
