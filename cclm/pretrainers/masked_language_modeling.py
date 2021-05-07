@@ -209,7 +209,6 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
                     )
 
                     x = self.get_batch(batch_inputs, batch_spans=batch_spans)
-                    # x = tf.concat([x, *[x for _ in range(self.num_negatives)]], axis=0)
 
                     y = np.array(batch_outputs)
                     y_sample, token_sample, mask = self.sample_from_positive(
@@ -259,12 +258,6 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
         self, x_char: np.ndarray, x_token: np.ndarray, y: np.ndarray, mask: np.ndarray
     ):
         with tf.GradientTape() as g:
-            # char_rep = self.get_embedding_for_pretraining(
-            #     x_char, mask=mask, training=True
-            # )
-            # token_emb = self.output_embedding(x_token)
-
-            # loss, predictions = self.get_loss(char_rep, token_emb, y)
             predictions = self([x_char, x_token, mask], training=True)
             loss = self.compiled_loss(y, predictions)
             to_diff = (
@@ -298,9 +291,7 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
     def sample_from_positive(self, y, x, batch_spans):
         with tf.device("/GPU:0"):
             # Compute the average loss for the batch.
-            # y_true = tf.cast(tf.reshape(y, [-1, 1]), tf.int64)
             y_true = y.reshape(-1, 1)
-            # sampled = tf.random.learned_unigram_candidate_sampler(
             (
                 neg_sample,
                 true_expected,
@@ -316,27 +307,16 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
             # true samples get a 1, negative samples get a 0
             y_sample = np.zeros((y_true.shape[0], 1 + self.num_negatives))
             y_sample[:, 0] = 1.0
-            # y_sample = tf.concat(
-            #     (tf.ones((y_true.shape[0], 1)), tf.zeros((neg_sample.shape[0], 1))),
-            #     axis=0,
-            # )
+
             neg_sample = neg_sample.numpy().reshape(y_true.shape[0], self.num_negatives)
             token_sample = np.concatenate((y_true, neg_sample), axis=1)
-            # token_sample = tf.reshape(
-            #     tf.concat((y_true, tf.reshape(neg_sample, (-1, 1))), axis=0), (-1,)
-            # )
+
             mask = np.zeros((*(x.shape), self.n_conv_filters))
             ind = 0
             for span in batch_spans:
                 mask[ind][span[0] : span[1]] = 1
                 ind += 1
 
-            # for _ in range(self.num_negatives):
-            #     for span in batch_spans:
-            #         mask[ind][span[0] : span[1]] = 1
-            #         ind += 1
-            # mask = mask.reshape((*mask.shape[:2], 1))
-            # mask = tf.cast(mask, tf.float16)
             return y_sample, token_sample, mask
 
     def get_loss(
