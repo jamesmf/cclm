@@ -23,7 +23,7 @@ def test_prep_encode_string():
 
 def test_prep_fit_char_dict():
     prep = Preprocessor()
-    prep.fit(["a a", "b a"], min_char_freq=2)
+    prep.fit(["a a", "b a"], min_char_count=2)
     print(prep.char_dict)
     assert "a" in prep.char_dict, "char dict not fit properly"
     assert "b" not in prep.char_dict, "char dict contains characters below min value"
