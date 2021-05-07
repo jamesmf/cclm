@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cclm"
-version = "0.1.0"
+version = "0.1.1"
 description = "NLP framework for composing together models modularly"
 authors = ["jamesmf"]
 license = "MIT"
@@ -16,6 +16,10 @@ datasets = "^1.1.3"
 tqdm = "^4.0.0"
 tokenizers = "^0.10.0"
 mlflow = "^1.16.0"
+
+[[tool.poetry.source]]
+name = "test-pypi"
+url = "https://test.pypi.org/legacy/"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.4"
