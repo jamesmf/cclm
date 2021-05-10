@@ -1,5 +1,4 @@
 import pytest
-from tensorflow.python.keras.engine import training
 from cclm.pretrainers import MaskedLanguagePretrainer
 from cclm.preprocessing import Preprocessor
 from cclm.models import CCLMModelBase
