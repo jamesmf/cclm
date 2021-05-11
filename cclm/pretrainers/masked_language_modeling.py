@@ -14,6 +14,7 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
         downsample_factor: int = 4,
         n_strided_convs: int = 2,
         stride_len: int = 2,
+        n_transformer_blocks=2,
         mask_id: int = 1,
         learning_rate: float = 0.001,
         train_base: bool = True,
@@ -42,6 +43,7 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
         ), "stride_len^n_strided_convs must equal downsample_factor"
         self.stride_len = int(stride_len)
         self.n_conv_filters = n_conv_filters
+        self.n_transformer_blocks = n_transformer_blocks
         self.pool = tf.keras.layers.GlobalMaxPool1D(dtype="float32")
         self.optimizer = tf.optimizers.SGD(learning_rate)
         self.num_negatives = num_negatives
@@ -83,7 +85,7 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
         """
         # reduce the size, transformer, upsample
 
-        layers = [
+        conv_layers = [
             tf.keras.layers.Conv1D(
                 self.n_conv_filters,
                 self.stride_len,
@@ -92,6 +94,10 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
                 activation="tanh",
             )
             for _ in range(self.n_strided_convs)
+        ]
+        transformer_layers = [
+            TransformerBlock(embed_dim=self.n_conv_filters)
+            for _ in range(self.n_transformer_blocks)
         ]
         model = tf.keras.Sequential(
             [
@@ -102,9 +108,9 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
                     activation="tanh",
                 ),
                 tf.keras.layers.Dropout(0.2),
-                *layers,
+                *conv_layers,
                 tf.keras.layers.Dropout(0.2),
-                TransformerBlock(embed_dim=self.n_conv_filters),
+                *transformer_layers,
                 *[
                     tf.keras.layers.UpSampling1D(size=self.downsample_factor)
                     for _ in range(1)
