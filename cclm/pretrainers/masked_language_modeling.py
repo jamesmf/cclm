@@ -1,7 +1,7 @@
 from typing import List, Tuple
 import tensorflow as tf
 import numpy as np
-from ..models import CCLMModelBase, TransformerBlock
+from ..models import TransformerBlock, PositionEmbedding
 from ..preprocessing import Preprocessor
 from .core import Pretrainer
 
@@ -110,6 +110,7 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
                 tf.keras.layers.Dropout(0.2),
                 *conv_layers,
                 tf.keras.layers.Dropout(0.2),
+                PositionEmbedding(self.base.max_example_len, self.n_conv_filters),
                 *transformer_layers,
                 *[
                     tf.keras.layers.UpSampling1D(size=self.downsample_factor)

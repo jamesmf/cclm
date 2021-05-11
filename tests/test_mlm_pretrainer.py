@@ -22,7 +22,7 @@ CORPUS = [
 # def test_generator():
 #     prep = MLMPreprocessor(max_example_len=10)
 #     prep.fit(CORPUS)
-#     base = CCLMModelBase(preprocessor=prep)
+#     base = CCLMModelBase(prep.max_example_len, prep.n_chars)
 #     mlp = MaskedLanguagePretrainer(
 #         base=base,
 #     )
@@ -38,9 +38,10 @@ CORPUS = [
 def test_fit():
     prep = Preprocessor(max_example_len=10)
     prep.fit(CORPUS)
-    base = CCLMModelBase(preprocessor=prep)
+    base = CCLMModelBase(prep.max_example_len, prep.n_chars)
     mlp = MaskedLanguagePretrainer(
         base=base,
+        preprocessor=prep,
         stride_len=1,
         downsample_factor=1,
         n_strided_convs=2,
@@ -65,8 +66,11 @@ def test_get_substr_short():
 
     prep = Preprocessor(max_example_len=10)
     prep.fit(CORPUS)
-    base = CCLMModelBase(preprocessor=prep)
-    mlp = MaskedLanguagePretrainer(base=base)
+    base = CCLMModelBase(prep.max_example_len, prep.n_chars)
+    mlp = MaskedLanguagePretrainer(
+        base=base,
+        preprocessor=prep,
+    )
     assert (
         mlp.get_substr(test_str) == test_str
     ), "string with len() < self.preprocessor.max_example_len should be substring'd to the same string"
@@ -77,8 +81,8 @@ def test_get_substr_long():
     set_seed()
     prep = Preprocessor(max_example_len=10)
     prep.fit(CORPUS)
-    base = CCLMModelBase(preprocessor=prep)
-    mlp = MaskedLanguagePretrainer(base=base)
+    base = CCLMModelBase(prep.max_example_len, prep.n_chars)
+    mlp = MaskedLanguagePretrainer(base=base, preprocessor=prep)
     assert mlp.get_substr(test_str) == "hello i am"
 
 
@@ -87,8 +91,11 @@ def test_batch_from_strs():
 
     prep = Preprocessor(max_example_len=16)
     prep.fit(CORPUS)
-    base = CCLMModelBase(preprocessor=prep)
-    mlp = MaskedLanguagePretrainer(base=base)
+    base = CCLMModelBase(prep.max_example_len, prep.n_chars)
+    mlp = MaskedLanguagePretrainer(
+        base=base,
+        preprocessor=prep,
+    )
     inps, spans, outs = mlp.batch_from_strs(CORPUS)
     print(inps)
     print(spans)

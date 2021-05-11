@@ -25,8 +25,8 @@ CORPUS = [
 def test_bp_init():
     prep = Preprocessor(max_example_len=10)
     prep.fit(CORPUS)
-    base = CCLMModelBase(preprocessor=prep)
-    pretrainer = BasePretrainer(base)
+    base = CCLMModelBase(prep.max_example_len, prep.n_chars)
+    pretrainer = BasePretrainer(base, preprocessor=prep)
 
     assert True, "error initializing a BasePretrainer"
 
@@ -34,10 +34,16 @@ def test_bp_init():
 def test_bp_fit():
     prep = Preprocessor(max_example_len=10)
     prep.fit(CORPUS)
-    base = CCLMModelBase(preprocessor=prep)
-    pretrainer = BasePretrainer(base)
+    base = CCLMModelBase(prep.max_example_len, prep.n_chars)
+    pretrainer = BasePretrainer(base, preprocessor=prep)
     gen = pretrainer.generator(CORPUS)
+    x, y = next(gen)
+    print(base.embedder.predict(x))
+    print(pretrainer.model.predict(x))
     pretrainer.model.compile("adam", tf.keras.losses.SparseCategoricalCrossentropy())
+    print(pretrainer.model.summary())
+    print(prep.n_chars)
+    print(next(gen))
     pretrainer.model.fit(gen, steps_per_epoch=2, epochs=2)
 
     assert True, "error fitting BasePretrainer"

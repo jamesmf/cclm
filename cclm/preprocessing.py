@@ -134,3 +134,7 @@ class Preprocessor:
             setattr(self, key, value)
         for key, value in list(self.char_rev.items()):
             self.char_rev[int(key)] = value
+
+    @property
+    def n_chars(self):
+        return np.max(list(self.char_dict.values())) + 1

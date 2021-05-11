@@ -20,10 +20,7 @@ class Pretrainer:
         base_args={},
         **kwargs,
     ):
-        if base:
-            self.preprocessor = base.preprocessor
-        else:
-            self.preprocessor = kwargs.get("preprocessor", Preprocessor())
+        self.preprocessor = kwargs.get("preprocessor", Preprocessor())
 
         if base is None:
             base = CCLMModelBase(**base_args)

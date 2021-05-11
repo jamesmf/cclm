@@ -169,8 +169,9 @@ def get_character_embedder(
 class CCLMModelBase:
     def __init__(
         self,
+        max_example_len: int,
+        n_chars: int,
         load_from=None,
-        preprocessor=None,
         char_emb_size=32,
         n_filters=256,
         prefix="cclm",
@@ -179,15 +180,16 @@ class CCLMModelBase:
         self.char_emb_size = char_emb_size
         self.n_filters = n_filters
         self.prefix = prefix
-        self.preprocessor = preprocessor
+        self.n_chars = n_chars
+        self.max_example_len = max_example_len
         if load_from:
             self._load(load_from, pool=pool)
         else:
             emb_in, emb_out = get_character_embedder(
-                self.preprocessor.max_example_len,
+                self.max_example_len,
                 char_emb_size,
                 2,
-                np.max(list(self.preprocessor.char_dict.values())) + 1,
+                n_chars + 1,
                 n_filters,
                 prefix,
             )
@@ -210,10 +212,10 @@ class CCLMModelBase:
         Load a model and its preprocessor
         """
         emb_in, emb_out = get_character_embedder(
-            self.preprocessor.max_example_len,
+            self.max_example_len,
             self.char_emb_size,
             2,
-            np.max(list(self.preprocessor.char_dict.values())),
+            self.n_chars + 1,
             self.n_filters,
             self.prefix,
         )
