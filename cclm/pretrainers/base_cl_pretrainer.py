@@ -1,4 +1,6 @@
+from tensorflow.python.autograph.pyct import transformer
 from .core import Pretrainer
+from ..models import TransformerBlock, PositionEmbedding
 import tensorflow as tf
 import numpy as np
 from datasets.arrow_dataset import Dataset
@@ -23,6 +25,9 @@ class BasePretrainer(Pretrainer):
     ):
         self.augmentor = kwargs.pop("augmentor", None)
         self.dropout_rate = kwargs.pop("dropout_rate", 0.1)
+        self.n_transformer_layers = kwargs.pop("n_transformer_layers", 2)
+        self.n_transformer_heads = kwargs.pop("n_transformer_heads", 8)
+        self.ff_dim = kwargs.pop("ff_dim", 128)
         super().__init__(
             base=base,
             task_name=task_name,
@@ -33,17 +38,28 @@ class BasePretrainer(Pretrainer):
 
     def get_model(self):
         """
-        SDO1D + LSTM
+        Transformer layers on top of the base
         """
+        emb_out_shape = self.base.embedder.outputs[0].shape[-1]
+        transformer_layers = [
+            TransformerBlock(
+                emb_out_shape,
+                self.n_transformer_heads,
+                self.ff_dim,
+            )
+        ]
         n_characters = self.base.n_chars + 1
         inp = self.base.embedder.input
-        emb_out = self.base.embedder.output
+        x = self.base.embedder.output
         drop = tf.keras.layers.Dropout(0.2)
-        lstm = tf.keras.layers.LSTM(128, return_sequences=True)
+        # lstm = tf.keras.layers.LSTM(128, return_sequences=True)
+        x = PositionEmbedding(self.base.max_example_len, emb_out_shape)(x)
+        for layer in transformer_layers:
+            x = layer(x)
         dense = tf.keras.layers.Dense(
             n_characters + 1, activation="softmax", dtype="float32"
         )
-        return tf.keras.Model(inp, dense(lstm(drop(emb_out))))
+        return tf.keras.Model(inp, dense(drop(x)))
 
     # def fit(self, data, batch_size=32):
     #     """

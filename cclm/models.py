@@ -171,29 +171,26 @@ class CCLMModelBase:
         self,
         max_example_len: int,
         n_chars: int,
-        load_from=None,
+        n_blocks: int = 4,
         char_emb_size=32,
         n_filters=256,
         prefix="cclm",
-        pool=False,
     ):
         self.char_emb_size = char_emb_size
         self.n_filters = n_filters
         self.prefix = prefix
         self.n_chars = n_chars
         self.max_example_len = max_example_len
-        if load_from:
-            self._load(load_from, pool=pool)
-        else:
-            emb_in, emb_out = get_character_embedder(
-                self.max_example_len,
-                char_emb_size,
-                2,
-                n_chars + 1,
-                n_filters,
-                prefix,
-            )
-            self.embedder = tf.keras.Model(emb_in, emb_out)
+        self.n_blocks = n_blocks
+        emb_in, emb_out = get_character_embedder(
+            self.max_example_len,
+            char_emb_size,
+            self.n_blocks,
+            n_chars + 1,
+            n_filters,
+            prefix,
+        )
+        self.embedder = tf.keras.Model(emb_in, emb_out)
 
     def save(self, path: str):
         """
@@ -206,35 +203,6 @@ class CCLMModelBase:
 
     def unfreeze_embedder(self):
         self.embedder.trainable = True
-
-    def _load(self, path: str, pool: bool = False):
-        """
-        Load a model and its preprocessor
-        """
-        emb_in, emb_out = get_character_embedder(
-            self.max_example_len,
-            self.char_emb_size,
-            2,
-            self.n_chars + 1,
-            self.n_filters,
-            self.prefix,
-        )
-        if pool:
-            emb_out = tf.keras.layers.GlobalMaxPooling1D(name="context_gmp")(emb_out)
-        self.embedder = tf.keras.Model(emb_in, emb_out)
-        loaded_model = tf.keras.models.load_model(path)
-        loaded_model.compile("Adam", "binary_crossentropy")
-        print([layer.name for layer in loaded_model.layers])
-        for layer in loaded_model.layers[:-1]:
-            try:
-                old_weights = layer.get_weights()
-                if len(old_weights) == 0:
-                    continue
-                print(f"initializing layer: {layer.name}")
-                new_layer = self.embedder.get_layer(layer.name)
-                new_layer.set_weights(old_weights)
-            except ValueError:
-                print(f"unable to transfer weights for {layer.name}")
 
 
 def rev(prep: Preprocessor, a: str):
