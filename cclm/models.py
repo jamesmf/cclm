@@ -98,10 +98,10 @@ def get_character_embedder(
     TODO: make this into a class so it's more obvious how to write your own
     """
     inp = tf.keras.layers.Input((max_len,), name=f"{prefix}_inp")
-    char_emb = tf.keras.layers.Embedding(
+    char_emb = TokenAndPositionEmbedding(
+        max_len,
         n_chars,
         char_emb_size,
-        name=f"{prefix}_embedding",
     )
     # char_conv_1 = tf.keras.layers.Conv1D(
     #     filters,
@@ -260,6 +260,32 @@ class PrinterCallback(tf.keras.callbacks.Callback):
             label,
         )
         print("*" * 80)
+
+
+class PositionEmbedding(tf.keras.layers.Layer):
+    def __init__(self, maxlen: int, embed_dim: int):
+        super(PositionEmbedding, self).__init__()
+        self.pos_emb = tf.keras.layers.Embedding(input_dim=maxlen, output_dim=embed_dim)
+
+    def call(self, x):
+        maxlen = tf.shape(x)[-2]
+        positions_in = tf.range(start=0, limit=maxlen, delta=1)
+        positions = self.pos_emb(positions_in)
+        out = x + positions
+        return out
+
+
+class TokenAndPositionEmbedding(tf.keras.layers.Layer):
+    def __init__(self, maxlen, vocab_size, embed_dim):
+        super(TokenAndPositionEmbedding, self).__init__()
+        self.token_emb = tf.keras.layers.Embedding(
+            input_dim=vocab_size, output_dim=embed_dim
+        )
+        self.pos_emb = PositionEmbedding(maxlen, embed_dim)
+
+    def call(self, x):
+        x = self.token_emb(x)
+        return self.pos_emb(x)
 
 
 class MultiHeadSelfAttention(tf.keras.layers.Layer):
