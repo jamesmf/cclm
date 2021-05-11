@@ -59,12 +59,11 @@ y_train = tf.keras.utils.to_categorical(dataset["train"]["label"])
 y_test = tf.keras.utils.to_categorical(dataset["test"]["label"])
 
 # create the preprocessor and fit it on the training set
-if args.load_base is None:
-    prep = Preprocessor(max_example_len=128, vocab_size=10000)
-    prep.fit(dataset_train)
-else:
-    prep = Preprocessor()
-    prep._load(args.load_base)
+
+prep = Preprocessor(max_example_len=128, vocab_size=10000)
+prep.fit(dataset_train)
+if args.load_base is not None:
+    prep._load(os.path.join(args.load_base, "cclm_config.json"))
 
 
 x_train = np.array(
@@ -113,8 +112,8 @@ if not args.skip_pretrain:
     )
     pretrainer_a.pretraining_model.fit(
         pretraining_generator,
-        epochs=50,
-        steps_per_epoch=5000,
+        epochs=10,
+        steps_per_epoch=1000,
         callbacks=[tensorboard_callback],
     )
 
