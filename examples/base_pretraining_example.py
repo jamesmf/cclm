@@ -55,7 +55,7 @@ else:
 
 mlflow.log_metric("n_chars", len(prep.char_rev))
 # initialize the base and possibly load its embedder
-base = CCLMModelBase(preprocessor=prep)
+base = CCLMModelBase(max_example_len=prep.max_example_len, n_chars. prep.n_chars)
 if args.load:
     base.embedder = tf.keras.models.load_model(os.path.join(args.load, "embedder"))
 

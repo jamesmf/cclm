@@ -7,7 +7,7 @@ vs
 """
 import os
 import argparse
-from cclm.pretraining import MaskedLanguagePretrainer
+from cclm.pretrainers import MaskedLanguagePretrainer
 from cclm.preprocessing import Preprocessor
 from cclm.models import CCLMModelBase, ComposedModel
 from datasets import load_dataset
@@ -74,10 +74,11 @@ x_test = np.array([prep.string_to_array(i, prep.max_example_len) for i in datase
 
 # create a base that embeds the input
 if args.load_base is None:
-    base = CCLMModelBase(preprocessor=prep)
+    base = CCLMModelBase(prep.max_example_len, prep.n_chars)
 else:
-    base = CCLMModelBase(preprocessor=prep)
+    base = CCLMModelBase(prep.max_example_len, prep.n_chars)
     base.embedder = tf.keras.models.load_model(os.path.join(args.load_base, "embedder"))
+    base.embedder.trainable = False
 
 # create two models that we'll combine - optionally we can pretrain one or more of them
 

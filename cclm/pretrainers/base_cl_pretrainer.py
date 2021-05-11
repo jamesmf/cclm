@@ -35,14 +35,13 @@ class BasePretrainer(Pretrainer):
         """
         SDO1D + LSTM
         """
-        cd = self.base.preprocessor.char_dict
-        n_characters = max(list(cd.values())) + 1
+        n_characters = self.base.n_chars + 1
         inp = self.base.embedder.input
         emb_out = self.base.embedder.output
         drop = tf.keras.layers.Dropout(0.2)
         lstm = tf.keras.layers.LSTM(128, return_sequences=True)
         dense = tf.keras.layers.Dense(
-            n_characters, activation="softmax", dtype="float32"
+            n_characters + 1, activation="softmax", dtype="float32"
         )
         return tf.keras.Model(inp, dense(lstm(drop(emb_out))))
 
