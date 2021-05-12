@@ -30,6 +30,13 @@ ap.add_argument(
     default=0.00005,
     type=float,
 )
+ap.add_argument(
+    "--maxlen",
+    help="max example length",
+    dest="max_example_len",
+    default=256,
+    type=int,
+)
 args = ap.parse_args()
 
 mlflow.log_params(vars(args))
@@ -44,7 +51,7 @@ dataset = load_dataset("wikipedia", "20200501.en", cache_dir="/app/cclm/.dataset
 
 augmentor = Augmentor()
 
-prep = Preprocessor()
+prep = Preprocessor(max_example_len=args.max_example_len)
 # load or fit the preprocessor
 if args.load:
     prep._load(os.path.join(args.load, "cclm_config.json"))
