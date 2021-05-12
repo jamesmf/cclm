@@ -1,7 +1,6 @@
 import pytest
-from cclm.pretrainers.base_cl_pretrainer import (
-    BasePretrainer,
-    BasePretrainerEvaluationCallback,
+from cclm.pretrainers.cl_mask_pretrainer import (
+    CLMaskPretrainer,
 )
 from cclm.preprocessing import Preprocessor
 from cclm.models import CCLMModelBase
@@ -22,20 +21,20 @@ CORPUS = [
 ]
 
 
-def test_bp_init():
+def test_clmaskpretrainer_init():
     prep = Preprocessor(max_example_len=10)
     prep.fit(CORPUS)
     base = CCLMModelBase(prep.max_example_len, prep.n_chars)
-    pretrainer = BasePretrainer(base, preprocessor=prep)
+    pretrainer = CLMaskPretrainer(base, preprocessor=prep)
 
-    assert True, "error initializing a BasePretrainer"
+    assert True, "error initializing a CLMaskPretrainer"
 
 
-def test_bp_fit():
+def test_clmaskpretrainer_fit():
     prep = Preprocessor(max_example_len=10)
     prep.fit(CORPUS)
     base = CCLMModelBase(prep.max_example_len, prep.n_chars)
-    pretrainer = BasePretrainer(base, preprocessor=prep)
+    pretrainer = CLMaskPretrainer(base, preprocessor=prep)
     gen = pretrainer.generator(CORPUS)
     x, y = next(gen)
     print(base.embedder.predict(x))
@@ -46,4 +45,4 @@ def test_bp_fit():
     print(next(gen))
     pretrainer.model.fit(gen, steps_per_epoch=2, epochs=2)
 
-    assert True, "error fitting BasePretrainer"
+    assert True, "error fitting CLMaskPretrainer"

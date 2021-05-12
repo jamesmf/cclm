@@ -1,3 +1,4 @@
+from cclm.preprocessing import Preprocessor
 from tensorflow.python.autograph.pyct import transformer
 from .core import Pretrainer
 from ..models import TransformerBlock, PositionEmbedding
@@ -7,12 +8,17 @@ from datasets.arrow_dataset import Dataset
 from typing import List, Union
 
 
-class BasePretrainer(Pretrainer):
+class CLMaskPretrainer(Pretrainer):
     """
-    Pretrain a CCLMBase embedder with a masked-character-like model.
+    Pretrain a model on an input with character-level masking
 
     This task is to take an input, apply noisy transformations
     (including the mask), and predict the original input
+
+    Every character in the input has a `character_mask_rate` probability of
+    being masked (independent of each other). If `consecutive_mask_len` is
+    greater than zero, one consecutive sequence of length `consecutive_mask_len`
+    will also be masked.
     """
 
     def __init__(
@@ -24,7 +30,8 @@ class BasePretrainer(Pretrainer):
         **kwargs,
     ):
         self.augmentor = kwargs.pop("augmentor", None)
-        self.dropout_rate = kwargs.pop("dropout_rate", 0.1)
+        self.character_mask_rate = kwargs.pop("character_mask_rate", 0.125)
+        self.consecutive_mask_len = kwargs.pop("consecutive_mask_len", 5)
         self.n_transformer_layers = kwargs.pop("n_transformer_layers", 2)
         self.n_transformer_heads = kwargs.pop("n_transformer_heads", 8)
         self.ff_dim = kwargs.pop("ff_dim", 128)
@@ -61,10 +68,14 @@ class BasePretrainer(Pretrainer):
         )
         return tf.keras.Model(inp, dense(drop(x)))
 
-    # def fit(self, data, batch_size=32):
-    #     """
-    #     self.model.fit(gen)
-    #     """
+    def get_mask(self, seq_len):
+        mask = np.zeros((seq_len,))
+        max_ind = seq_len - self.consecutive_mask_len
+        if max_ind <= 0:
+            return mask
+        sampled_ind = np.random.randint(0, max_ind)
+        mask[sampled_ind : sampled_ind + self.consecutive_mask_len] = 1
+        return mask
 
     def generator(self, data: Union[Dataset, List[str]], batch_size: int = 32):
         """
@@ -89,22 +100,28 @@ class BasePretrainer(Pretrainer):
                     substr, self.preprocessor.max_example_len
                 )
                 x_str = np.where(
-                    np.random.rand(*x_str.shape) < self.dropout_rate,
+                    np.random.rand(*x_str.shape) < self.character_mask_rate,
                     self.preprocessor.mask_token_ind,
                     x_str,
                 )
+                if self.consecutive_mask_len > 0:
+                    x_str = np.where(
+                        self.get_mask(len(x_str)) == 1,
+                        self.preprocessor.mask_token_ind,
+                        x_str,
+                    )
                 x.append(x_str)
                 y.append(y_str)
                 if len(x) == batch_size or n + 1 == len(data):
                     yield np.array(x), np.array(y)
                     x, y = [], []
 
-    def evaluate_prediction(self, x: np.ndarray, pred: np.ndarray):
+    def evaluate_prediction(self, x: np.ndarray, pred: np.ndarray, prep: Preprocessor):
         """
         evaluate the predicted string compared to the input
         """
         out_str = ""
-        rev = self.preprocessor.char_rev
+        rev = prep.char_rev
         maxes = np.argmax(pred, axis=2)
         for n in range(len(x)):
             out_str += f"Example {n}:\n"
@@ -113,8 +130,10 @@ class BasePretrainer(Pretrainer):
         return out_str
 
 
-class BasePretrainerEvaluationCallback(tf.keras.callbacks.Callback):
-    def __init__(self, data: List[str], pretrainer: BasePretrainer, log_every: int = 5):
+class CLMaskPretrainerEvaluationCallback(tf.keras.callbacks.Callback):
+    def __init__(
+        self, data: List[str], pretrainer: CLMaskPretrainer, log_every: int = 5
+    ):
         super().__init__()
         self.pretrainer = pretrainer
         self.log_every = log_every
@@ -123,6 +142,8 @@ class BasePretrainerEvaluationCallback(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs):
         if epoch % self.log_every == 0:
             x, y = next(self.gen)
-            log_str = self.pretrainer.evaluate_prediction(x, self.model(x))
+            log_str = self.pretrainer.evaluate_prediction(
+                x, self.model(x), self.pretrainer.preprocessor
+            )
             print(log_str)
         return
