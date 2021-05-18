@@ -58,15 +58,14 @@ class CLMaskPretrainer(Pretrainer):
         n_characters = self.base.n_chars + 1
         inp = self.base.embedder.input
         x = self.base.embedder.output
-        drop = tf.keras.layers.Dropout(0.2)
-        # lstm = tf.keras.layers.LSTM(128, return_sequences=True)
+
         x = PositionEmbedding(self.base.max_example_len, emb_out_shape)(x)
         for layer in transformer_layers:
             x = layer(x)
         dense = tf.keras.layers.Dense(
             n_characters + 1, activation="softmax", dtype="float32"
         )
-        return tf.keras.Model(inp, dense(drop(x)))
+        return tf.keras.Model(inp, dense(x))
 
     def get_mask(self, seq_len):
         mask = np.zeros((seq_len,))
