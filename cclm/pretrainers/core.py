@@ -21,21 +21,24 @@ class Pretrainer:
         **kwargs,
     ):
         self.preprocessor = kwargs.get("preprocessor", Preprocessor())
+        self.task_name = task_name
 
         if base is None:
             base = CCLMModelBase(**base_args)
         self.base = base
         if load_from:
-            self.model = tf.keras.models.load_model(load_from)
+            self.load(load_from)
         else:
             self.model = self.get_model()
-        self.task_name = task_name
 
     def get_model(self, *args, **kwargs):
         """
         This should return a Model that accepts input with the shape of a `base` and
         produces output of the same shape.
         """
+
+    def load(self, path: str):
+        pass
 
     def compile(self, *args, **kwargs):
         self.model.compile(*args, **kwargs)

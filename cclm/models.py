@@ -97,7 +97,7 @@ def get_character_embedder(
 
     TODO: make this into a class so it's more obvious how to write your own
     """
-    inp = tf.keras.layers.Input((max_len,), name=f"{prefix}_inp")
+    inp = tf.keras.layers.Input((None,), name=f"{prefix}_inp")
     char_emb = TokenAndPositionEmbedding(
         max_len,
         n_chars,

@@ -1,7 +1,6 @@
 import pytest
-from cclm.pretrainers.base_cl_pretrainer import (
-    BasePretrainer,
-    BasePretrainerEvaluationCallback,
+from cclm.pretrainers.cl_mask_pretrainer import (
+    CLMaskPretrainer,
 )
 from cclm.preprocessing import Preprocessor
 from cclm.models import CCLMModelBase
@@ -21,21 +20,23 @@ CORPUS = [
     "vocabulary and in order for ther eto be enough sampled values for the tensorflow log uniform candidate sampler",
 ]
 
+BASE_ARGS = {"max_example_len": 10, "n_chars": 20}
 
-def test_bp_init():
+
+def test_clmaskpretrainer_init():
     prep = Preprocessor(max_example_len=10)
     prep.fit(CORPUS)
     base = CCLMModelBase(prep.max_example_len, prep.n_chars)
-    pretrainer = BasePretrainer(base, preprocessor=prep)
+    pretrainer = CLMaskPretrainer(base, preprocessor=prep)
 
-    assert True, "error initializing a BasePretrainer"
+    assert True, "error initializing a CLMaskPretrainer"
 
 
-def test_bp_fit():
+def test_clmaskpretrainer_fit():
     prep = Preprocessor(max_example_len=10)
     prep.fit(CORPUS)
     base = CCLMModelBase(prep.max_example_len, prep.n_chars)
-    pretrainer = BasePretrainer(base, preprocessor=prep)
+    pretrainer = CLMaskPretrainer(base, preprocessor=prep)
     gen = pretrainer.generator(CORPUS)
     x, y = next(gen)
     print(base.embedder.predict(x))
@@ -46,4 +47,29 @@ def test_bp_fit():
     print(next(gen))
     pretrainer.model.fit(gen, steps_per_epoch=2, epochs=2)
 
-    assert True, "error fitting BasePretrainer"
+    assert True, "error fitting CLMaskPretrainer"
+
+
+def test_clmask_loading(tmp_path):
+    sub = tmp_path / "clmask_load_test"
+    sub.mkdir()
+    cmp = CLMaskPretrainer(base_args=BASE_ARGS)
+    cmp.save(sub)
+    cmp2 = CLMaskPretrainer(base_args=BASE_ARGS)
+    cmp2.load(sub)
+    cmp3 = CLMaskPretrainer(base_args=BASE_ARGS, load_from=sub)
+    w1 = cmp.model.get_weights()[0]
+    w2 = cmp2.model.get_weights()[0]
+    w3 = cmp3.model.get_weights()[0]
+    assert np.allclose(
+        w1, w2
+    ), "failed to load weights of CLMaskPretrainer model using .load()"
+    assert np.allclose(
+        w1, w3
+    ), "failed to load weights of CLMaskPretrainer model using load_from="
+    for attr in cmp.save_attr:
+        att1 = getattr(cmp, attr)
+        att2 = getattr(cmp2, attr)
+        att3 = getattr(cmp2, attr)
+        assert att1 == att2, f"failed to set attribute {attr} when using .load()"
+        assert att1 == att3, f"failed to set attribute {attr} when using load_from="

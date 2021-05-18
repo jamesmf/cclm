@@ -1,8 +1,8 @@
 import os
 from cclm.preprocessing import Preprocessor
-from cclm.pretrainers.base_cl_pretrainer import (
-    BasePretrainer,
-    BasePretrainerEvaluationCallback,
+from cclm.pretrainers.cl_mask_pretrainer import (
+    CLMaskPretrainer,
+    CLMaskPretrainerEvaluationCallback,
 )
 from cclm.preprocessing import Preprocessor
 from cclm.models import CCLMModelBase
@@ -30,6 +30,13 @@ ap.add_argument(
     default=0.00005,
     type=float,
 )
+ap.add_argument(
+    "--maxlen",
+    help="max example length",
+    dest="max_example_len",
+    default=256,
+    type=int,
+)
 args = ap.parse_args()
 
 mlflow.log_params(vars(args))
@@ -44,7 +51,7 @@ dataset = load_dataset("wikipedia", "20200501.en", cache_dir="/app/cclm/.dataset
 
 augmentor = Augmentor()
 
-prep = Preprocessor()
+prep = Preprocessor(max_example_len=args.max_example_len)
 # load or fit the preprocessor
 if args.load:
     prep._load(os.path.join(args.load, "cclm_config.json"))
@@ -55,12 +62,12 @@ else:
 
 mlflow.log_metric("n_chars", len(prep.char_rev))
 # initialize the base and possibly load its embedder
-base = CCLMModelBase(max_example_len=prep.max_example_len, n_chars. prep.n_chars)
+base = CCLMModelBase(prep.max_example_len, prep.n_chars)
 if args.load:
     base.embedder = tf.keras.models.load_model(os.path.join(args.load, "embedder"))
 
 # initialize the pretrainer and optionally load an already trained model
-bp = BasePretrainer(base=base, augmentor=augmentor)
+bp = CLMaskPretrainer(base=base, augmentor=augmentor, preprocessor=prep)
 if args.load:
     bp.model = tf.keras.models.load_model(os.path.join(args.load, "model"))
 
@@ -72,12 +79,12 @@ gen = bp.generator(dataset)
 print(bp.model.summary())
 
 callbacks = [
-    BasePretrainerEvaluationCallback(dataset, bp),
+    CLMaskPretrainerEvaluationCallback(dataset, bp),
 ]
 
 bp.model.fit(gen, steps_per_epoch=5000, epochs=500, callbacks=callbacks)
 x, y = next(gen)
-print(bp.evaluate_prediction(x, bp.model.predict(x)))
+print(bp.evaluate_prediction(x, bp.model.predict(x), prep))
 
 os.makedirs(artifact_path, exist_ok=True)
 prep.save(artifact_path)
