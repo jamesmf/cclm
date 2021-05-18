@@ -1,11 +1,14 @@
+import os
+import json
 from cclm.preprocessing import Preprocessor
 from tensorflow.python.autograph.pyct import transformer
 from .core import Pretrainer
 from ..models import TransformerBlock, PositionEmbedding
+from ..augmentation import Augmentor
 import tensorflow as tf
 import numpy as np
 from datasets.arrow_dataset import Dataset
-from typing import List, Union
+from typing import List, Union, Optional
 
 
 class CLMaskPretrainer(Pretrainer):
@@ -27,14 +30,28 @@ class CLMaskPretrainer(Pretrainer):
         task_name="pretraining",
         load_from: str = None,
         base_args={},
+        augmentor: Optional[Augmentor] = None,
+        character_mask_rate: float = 0.125,
+        consecutive_mask_len: int = 5,
+        n_transformer_layers: int = 3,
+        n_transformer_heads: int = 8,
+        ff_dim: int = 128,
         **kwargs,
     ):
-        self.augmentor = kwargs.pop("augmentor", None)
-        self.character_mask_rate = kwargs.pop("character_mask_rate", 0.125)
-        self.consecutive_mask_len = kwargs.pop("consecutive_mask_len", 5)
-        self.n_transformer_layers = kwargs.pop("n_transformer_layers", 2)
-        self.n_transformer_heads = kwargs.pop("n_transformer_heads", 8)
-        self.ff_dim = kwargs.pop("ff_dim", 128)
+        self.save_attr = [
+            "task_name",
+            "character_mask_rate",
+            "consecutive_mask_len",
+            "n_transformer_layers",
+            "n_transformer_heads",
+            "ff_dim",
+        ]
+        self.augmentor = augmentor
+        self.character_mask_rate = character_mask_rate
+        self.consecutive_mask_len = consecutive_mask_len
+        self.n_transformer_layers = n_transformer_layers
+        self.n_transformer_heads = n_transformer_heads
+        self.ff_dim = ff_dim
         super().__init__(
             base=base,
             task_name=task_name,
@@ -54,6 +71,7 @@ class CLMaskPretrainer(Pretrainer):
                 self.n_transformer_heads,
                 self.ff_dim,
             )
+            for _ in range(self.n_transformer_layers)
         ]
         n_characters = self.base.n_chars + 1
         inp = self.base.embedder.input
@@ -127,6 +145,33 @@ class CLMaskPretrainer(Pretrainer):
             out_str += "".join(rev[i] for i in x[n]) + "\n"
             out_str += "".join(rev[i] for i in maxes[n]) + "\n\n"
         return out_str
+
+    def save(self, path: str):
+        """
+        Persist the model weights and the configuration necessary to load it back up
+        """
+        base_path = os.path.join(path, self.task_name)
+        os.makedirs(base_path, exist_ok=True)
+        out_dict = {}
+        for attr in self.save_attr:
+            out_dict[attr] = getattr(self, attr)
+        with open(os.path.join(base_path, "config.json"), "w") as f:
+            json.dump(out_dict, f, indent=2)
+        weights_path = os.path.join(base_path, "weights")
+        self.model.save_weights(weights_path)
+
+    def load(self, path: str):
+        """
+        Load the persisted model weights and attributes
+        """
+        with open(os.path.join(path, self.task_name, "config.json"), "r") as f:
+            config = json.load(f)
+        for attr, value in config.items():
+            setattr(self, attr, value)
+
+        weights_path = os.path.join(path, self.task_name, "weights")
+        self.model = self.get_model()
+        self.model.load_weights(weights_path)
 
 
 class CLMaskPretrainerEvaluationCallback(tf.keras.callbacks.Callback):
