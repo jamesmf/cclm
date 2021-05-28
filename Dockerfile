@@ -1,4 +1,4 @@
-FROM tensorflow/tensorflow:2.3.1-gpu
+FROM tensorflow/tensorflow:2.4.1-gpu
 
 RUN apt-get update && \
     apt-get install -y git
@@ -9,4 +9,4 @@ COPY . /app/cclm
 
 WORKDIR /app/cclm
 
-RUN $HOME/.poetry/bin/poetry install
+RUN $HOME/.poetry/bin/poetry config virtualenvs.create false && $HOME/.poetry/bin/poetry install
