@@ -4,6 +4,9 @@
 ### Added
 - Shelf implementation and tests
 
+### Changed
+- Moved CCLMModelBase to Embedder (breaking change)
+
 ### Removed
 - `setup.py`
 

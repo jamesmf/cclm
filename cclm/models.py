@@ -1,4 +1,4 @@
-from typing import Any, Generator, List, Dict
+from typing import Any, Generator, List, Dict, Optional
 import numpy as np
 import json
 import os
@@ -38,132 +38,140 @@ def zero_out_zero_embedding(model: tf.keras.Model):
             layer.set_weights(w)
 
 
-def get_block(
-    x: tf.Tensor,
-    n_filters: int,
-    filter_len: int,
-    global_filters: int,
-    prefix: str,
-    suffix: str,
-):
-    """
-    Add a block of layers on top of input tensor
-    """
-    char_conv_1 = tf.keras.layers.Conv1D(
-        n_filters,
-        filter_len,
-        activation=tf.keras.layers.LeakyReLU(alpha=0.1),
-        name=f"{prefix}_conv_{suffix}_1",
-        padding="same",
-    )
-    char_conv_2 = tf.keras.layers.Conv1D(
-        n_filters,
-        filter_len,
-        activation=tf.keras.layers.LeakyReLU(alpha=0.1),
-        name=f"{prefix}_conv_{suffix}_2",
-        padding="same",
-    )
-    char_conv_3 = tf.keras.layers.Conv1D(
-        n_filters,
-        filter_len,
-        activation=tf.keras.layers.LeakyReLU(alpha=0.1),
-        name=f"{prefix}_conv_{suffix}_3",
-        padding="same",
-    )
-    broadcaster_1 = GlobalBroadcaster1D(global_filters)
-    cc1 = char_conv_1(x)
-    x = tf.keras.layers.Dropout(0.25)(cc1)
-    x = char_conv_2(x)
-    x = broadcaster_1(x)
-    x = char_conv_3(x)
-    return tf.keras.layers.Add(name=f"{prefix}_res_{suffix}")([cc1, x])
+class Embedder:
+    persisted_attrs: List[str] = [
+        "max_len",
+        "char_emb_size",
+        "n_blocks",
+        "n_chars",
+        "n_filters",
+        "global_filters",
+        "filter_len",
+    ]
+    type_desc = "embedder"
+    config_name = "config.json"
 
+    def __init__(
+        self,
+        max_len: int = 1024,
+        n_chars: int = 1000,
+        char_emb_size: int = 32,
+        n_blocks: int = 5,
+        n_filters: int = 512,
+        global_filters: int = 64,
+        filter_len: int = 3,
+        load_from: Optional[str] = None,
+    ) -> None:
+        self.max_len = max_len
+        self.char_emb_size = char_emb_size
+        self.n_blocks = n_blocks
+        self.n_chars = n_chars
+        self.n_filters = n_filters
+        self.global_filters = global_filters
+        self.filter_len = filter_len
 
-def get_character_embedder(
-    max_len: int,
-    char_emb_size: int,
-    n_blocks: int,
-    n_chars: int,
-    n_filters: int,
-    prefix: str,
-    global_filters: int = 64,
-) -> tf.keras.Model:
-    """
-    Return a basic model that embeds character-level input and passes it through conv
-    layers that don't change its length.
+        # if load_from left out the type_desc suffix add it
+        if load_from and os.path.split(load_from)[-1] != self.type_desc:
+            load_from = os.path.join(load_from, self.type_desc)
 
-    Also aggregated sequence-level info by pooling then multiplying to make global information
-    available in lower levels
+        if load_from:
+            with open(os.path.join(load_from, self.config_name), "r") as f:
+                config = json.load(f)
+                self.from_config(config)
 
-    TODO: make this into a class so it's more obvious how to write your own
-    """
-    inp = tf.keras.layers.Input((None,), name=f"{prefix}_inp")
-    char_emb = TokenAndPositionEmbedding(
-        max_len,
-        n_chars,
-        char_emb_size,
-    )
-    # char_conv_1 = tf.keras.layers.Conv1D(
-    #     filters,
-    #     3,
-    #     activation=tf.keras.layers.LeakyReLU(alpha=0.1),
-    #     name=f"{prefix}_c1",
-    #     padding="same",
-    # )
-    # char_conv_2 = tf.keras.layers.Conv1D(
-    #     filters,
-    #     3,
-    #     activation=tf.keras.layers.LeakyReLU(alpha=0.1),
-    #     name=f"{prefix}_c2",
-    #     padding="same",
-    # )
-    # char_conv_3 = tf.keras.layers.Conv1D(
-    #     filters,
-    #     3,
-    #     activation=tf.keras.layers.LeakyReLU(alpha=0.1),
-    #     name=f"{prefix}_c3",
-    #     padding="same",
-    # )
-    # char_conv_4 = tf.keras.layers.Conv1D(
-    #     filters,
-    #     3,
-    #     activation=tf.keras.layers.LeakyReLU(alpha=0.1),
-    #     name=f"{prefix}_c4",
-    #     padding="same",
-    # )
-    # char_conv_5 = tf.keras.layers.Conv1D(
-    #     4 * filters,
-    #     3,
-    #     activation=tf.keras.layers.LeakyReLU(alpha=0.1),
-    #     name=f"{prefix}_c5",
-    #     padding="same",
-    # )
-    # broadcaster_1 = GlobalBroadcaster1D(64)
-    # broadcaster_2 = GlobalBroadcaster1D(64)
+        inp_layer = tf.keras.layers.Input((self.max_len))
+        self.model = self.get_character_embedder(inp_layer, "cclm_embedder")
+        if load_from:
+            self.model.load_weights(load_from)
 
-    # initial input and conv
-    x = char_emb(inp)
-    # cc1 = char_conv_1(x)
-    # x = tf.keras.layers.Dropout(0.25)(cc1)
-    # x = char_conv_2(x)
-    # x = broadcaster_1(x)
-    # x = char_conv_3(x)
-    # r1 = tf.keras.layers.Add(name=f"{prefix}_res_conn")([cc1, x])
-    # x = tf.keras.layers.Dropout(0.25)(x)
-    # x = char_conv_4(x)
-    # r2 = tf.keras.layers.Add(name=f"{prefix}_res_conn_2")([r1, x])
-    # x = broadcaster_2(r2)
-    # x = char_conv_5(x)
-    for n in range(n_blocks):
-        x = get_block(
-            x,
-            n_filters,
-            3,
-            global_filters,
-            prefix,
-            str(n),
+    def from_config(self, config: Dict[str, Any]) -> None:
+        for key, value in config.items():
+            if isinstance(key, str):
+                setattr(self, key, value)
+            else:
+                print(f"could not load {key} with value {value} from config")
+
+    def save_config(self, dir: str):
+        config = {key: getattr(self, key) for key in self.persisted_attrs}
+        with open(os.path.join(dir, self.config_name), "w") as f:
+            json.dump(config, f, indent=2)
+
+    def save_model(self, dir: str):
+        self.model.save_weights(dir)
+
+    def save(self, dir: str):
+        new_dir = os.path.join(dir, self.type_desc)
+        os.makedirs(new_dir, exist_ok=True)
+        self.save_config(new_dir)
+        self.save_model(new_dir)
+
+    def get_block(
+        self,
+        x: tf.Tensor,
+        prefix: str,
+        suffix: str,
+    ):
+        """
+        Add a block of layers on top of input tensor
+        """
+        char_conv_1 = tf.keras.layers.Conv1D(
+            self.n_filters,
+            self.filter_len,
+            activation=tf.keras.layers.LeakyReLU(alpha=0.1),
+            name=f"{prefix}_conv_{suffix}_1",
+            padding="same",
         )
-    return inp, x
+        char_conv_2 = tf.keras.layers.Conv1D(
+            self.n_filters,
+            self.filter_len,
+            activation=tf.keras.layers.LeakyReLU(alpha=0.1),
+            name=f"{prefix}_conv_{suffix}_2",
+            padding="same",
+        )
+        char_conv_3 = tf.keras.layers.Conv1D(
+            self.n_filters,
+            self.filter_len,
+            activation=tf.keras.layers.LeakyReLU(alpha=0.1),
+            name=f"{prefix}_conv_{suffix}_3",
+            padding="same",
+        )
+        broadcaster_1 = GlobalBroadcaster1D(self.global_filters)
+        cc1 = char_conv_1(x)
+        x = tf.keras.layers.Dropout(0.25)(cc1)
+        x = char_conv_2(x)
+        x = broadcaster_1(x)
+        x = char_conv_3(x)
+        return tf.keras.layers.Add(name=f"{prefix}_res_{suffix}")([cc1, x])
+
+    def get_character_embedder(
+        self,
+        inp_layer: tf.keras.layers.Input,
+        prefix: str,
+    ) -> tf.keras.Model:
+        """
+        Return a basic model that embeds character-level input and passes it through conv
+        layers that don't change its length.
+
+        Also aggregated sequence-level info by pooling then multiplying to make global information
+        available in lower levels
+
+        TODO: make this into a class so it's more obvious how to write your own
+        """
+        char_emb = TokenAndPositionEmbedding(
+            self.max_len,
+            self.n_chars,
+            self.char_emb_size,
+        )
+        # initial input and conv
+        x = char_emb(inp_layer)
+
+        for n in range(self.n_blocks):
+            x = self.get_block(
+                x,
+                prefix,
+                str(n),
+            )
+        return tf.keras.Model(inp_layer, x)
 
 
 class CCLMModelBase:
