@@ -9,7 +9,7 @@ import os
 import argparse
 from cclm.pretrainers import MaskedLanguagePretrainer
 from cclm.preprocessing import Preprocessor
-from cclm.models import CCLMModelBase, ComposedModel
+from cclm.models import Embedder, ComposedModel
 from datasets import load_dataset
 import numpy as np
 import tensorflow as tf
@@ -73,23 +73,23 @@ x_test = np.array([prep.string_to_array(i, prep.max_example_len) for i in datase
 
 # create a base that embeds the input
 if args.load_base is None:
-    base = CCLMModelBase(prep.max_example_len, prep.n_chars)
+    base = Embedder(prep.max_example_len, prep.n_chars)
 else:
-    base = CCLMModelBase(prep.max_example_len, prep.n_chars)
+    base = Embedder(prep.max_example_len, prep.n_chars, load_from=args.load_base)
     base.embedder = tf.keras.models.load_model(os.path.join(args.load_base, "embedder"))
     base.embedder.trainable = False
 
 # create two models that we'll combine - optionally we can pretrain one or more of them
 
 pretrainer_a = MaskedLanguagePretrainer(
-    base=base,
+    embedder=base,
     downsample_factor=1,
     n_strided_convs=4,
     stride_len=1,
 )
 
 pretrainer_b = MaskedLanguagePretrainer(
-    base=base,
+    embedder=base,
     downsample_factor=16,
     n_strided_convs=4,
 )

@@ -58,7 +58,7 @@ class Embedder:
         char_emb_size: int = 32,
         n_blocks: int = 5,
         n_filters: int = 512,
-        global_filters: int = 64,
+        global_filters: int = 128,
         filter_len: int = 3,
         load_from: Optional[str] = None,
     ) -> None:
@@ -172,45 +172,6 @@ class Embedder:
                 str(n),
             )
         return tf.keras.Model(inp_layer, x)
-
-
-class CCLMModelBase:
-    def __init__(
-        self,
-        max_example_len: int,
-        n_chars: int,
-        n_blocks: int = 4,
-        char_emb_size=32,
-        n_filters=256,
-        prefix="cclm",
-    ):
-        self.char_emb_size = char_emb_size
-        self.n_filters = n_filters
-        self.prefix = prefix
-        self.n_chars = n_chars
-        self.max_example_len = max_example_len
-        self.n_blocks = n_blocks
-        emb_in, emb_out = get_character_embedder(
-            self.max_example_len,
-            char_emb_size,
-            self.n_blocks,
-            n_chars + 1,
-            n_filters,
-            prefix,
-        )
-        self.embedder = tf.keras.Model(emb_in, emb_out)
-
-    def save(self, path: str):
-        """
-        Use keras to save the model and its preprocessor
-        """
-        self.embedder.save(path)
-
-    def freeze_embedder(self):
-        self.embedder.trainable = False
-
-    def unfreeze_embedder(self):
-        self.embedder.trainable = True
 
 
 def rev(prep: Preprocessor, a: str):
@@ -359,27 +320,27 @@ class TransformerBlock(tf.keras.layers.Layer):
 class ComposedModel(tf.keras.layers.Layer):
     def __init__(
         self,
-        base: CCLMModelBase,
-        models: List[tf.keras.Model],
+        embedder: Embedder,
+        components: List[tf.keras.Model],
         name: str = "composed_model",
     ):
         """
         Holds a set of pretrained models that share a base. When called, it will
-        run the input through the base's embedder, call each model on that embedding,
+        run the input through the base embedder, call each model on that embedding,
         and concatenate the output along the last dimension
         """
         super().__init__()
-        self.models = models
-        self.base = base
+        self.models = components
+        self.embedder = embedder
         self.model_name = name
         self.model = self.build_model()
 
     def build_model(self):
-        emb = self.base.embedder
+        emb = self.embedder.model
 
         towers = []
-        for model in self.models:
-            x = model(emb.output)
+        for model_component in self.components:
+            x = model_component(emb.output)
             towers.append(x)
         cat = tf.keras.layers.Concatenate()(towers)
         return tf.keras.Model(emb.input, cat, name=self.model_name)

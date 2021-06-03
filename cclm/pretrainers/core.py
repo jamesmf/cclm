@@ -1,8 +1,8 @@
-from typing import List
+from typing import List, Optional
 import tensorflow as tf
 import numpy as np
 from ..preprocessing import Preprocessor
-from ..models import CCLMModelBase, TransformerBlock
+from ..models import Embedder
 
 
 class Pretrainer:
@@ -14,18 +14,21 @@ class Pretrainer:
 
     def __init__(
         self,
-        base=None,
-        task_name="pretraining",
+        embedder: Optional[Embedder] = None,
+        preprocessor: Optional[Preprocessor] = None,
+        task_name: str = "pretraining",
         load_from: str = None,
-        base_args={},
+        embedder_args={},
         **kwargs,
     ):
-        self.preprocessor = kwargs.get("preprocessor", Preprocessor())
+        if preprocessor is None:
+            preprocessor = Preprocessor()
+        self.preprocessor = preprocessor
         self.task_name = task_name
 
-        if base is None:
-            base = CCLMModelBase(**base_args)
-        self.base = base
+        if embedder is None:
+            embedder = Embedder(**embedder_args)
+        self.embedder = embedder
         if load_from:
             self.load(load_from)
         else:
@@ -33,7 +36,7 @@ class Pretrainer:
 
     def get_model(self, *args, **kwargs):
         """
-        This should return a Model that accepts input with the shape of a `base` and
+        This should return a Model that accepts input with the shape of a the embedder and
         produces output of the same shape.
         """
 

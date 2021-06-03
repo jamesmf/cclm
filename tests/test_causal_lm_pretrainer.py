@@ -1,7 +1,6 @@
 import pytest
 import cclm.pretrainers.causal_lm as clm
 from cclm.preprocessing import Preprocessor
-from cclm.models import CCLMModelBase
 import numpy as np
 import tensorflow as tf
 

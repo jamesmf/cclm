@@ -22,9 +22,9 @@ The choice to emphasize character-level rather than arbitrary tokenization schem
 
 #### Basic concepts
 
-The main output of a training job with `cclm` is a `ComposedModel`, which consists of a `Preprocessor` that turns text into a vector[int], a base model that embeds that vector input, and one or more models that accept the output of the embedder. The `ComposedModel` concatenates the output from those models together to produce its final output.
+The main output of a training job with `cclm` is a `ComposedModel`, which consists of a `Preprocessor` that turns text into a vector[int], a base model that embeds that vector input, and one or more model components that accept the output of the embedder. The `ComposedModel` concatenates the output from those models together to produce its final output.
 
-The package uses `datasets` and `tokenizers` from `huggingface` for a standard interface and to benefit from their great framework- but to fit models and preprocessors, you can also pass a `List[str]` directly.
+The package uses `datasets` and `tokenizers` from `huggingface` for a standard interface and to benefit from their great framework. To fit models and preprocessors, you can also pass a `List[str]` directly.
 
 To start, you need a `Preprocessor`.
 
@@ -35,31 +35,31 @@ prep = Preprocessor()  # set max_example_len to specify a maximum input length
 prep.fit(dataset) # defines the model's vocabulary (character-level)
 ```
 
-Once you have that, you can create a `CCLMModelBase`, which is the common base on which all the separate models will sit. This is a flexible class primarily responsible for holding a model that embeds a sequence of integers (representing characters) into a space the components expect. For more complicated setups, the `CCLMModelBase` could have a `ComposedModel` as a `.embedder`
+Once you have that, you can create an `Embedder`, which is the common base on which all the separate models will sit. This is a flexible class primarily responsible for holding a model that embeds a sequence of integers (representing characters) into a space the components expect. For more complicated setups, the `Embedder` could have a `ComposedModel` as its `model`
 
 ```python
-from cclm.models import CCLMModelBase
+from cclm.models import Embedder
 
-base = CCLMModelBase(preprocessor=prep)
+embedder = Embedder(prep.max_example_len, prep.n_chars)
 ```
 
-The base doesn't need to be fit, as you can fit it while you do your first pretraining task.
+The embedder doesn't necessarily need to be fit by itself, as you can fit it while you do your first pretraining task.
 
 Now you're ready to build your first model using a pretraining task (here masked language modeling)
 
 ```python
 from cclm.pretraining import MaskedLanguagePretrainer
 
-pretrainer = MaskedLanguagePretrainer(base=base)
+pretrainer = MaskedLanguagePretrainer(embedder=embedder)
 pretrainer.fit(dataset, epochs=10)
 ```
 
-The `MaskedLanguagePretrainer` defines a transformer model (which uses strided convolutions to reduce the size before the transformer layer, then upsamples to match the original size), and calling `.fit()` will use the `Preprocessor` associated with the `base` to produce masked inputs and try to identify the missing input token(s) using `sampled_softmax` loss or negative sampling. This is just one example of a pretraining task, but others can be found in `cclm.pretrainers`.
+The `MaskedLanguagePretrainer` defines a transformer-based model to do masked language modeling. Calling `.fit()` will use the `Preprocessor` to produce masked inputs and try to identify the missing input token(s) using `sampled_softmax` loss or negative sampling. This is just one example of a pretraining task, but others can be found in `cclm.pretrainers`.
 
 Once you've trained one or more models using `Pretrainer` objects, you can compose them together into one model.
 
 ```python
-composed = ComposedModel(base, [pretrainer_a.model, pretrainer_b.model])
+composed = ComposedModel(embedder, [pretrainer_a.model, pretrainer_b.model])
 ```
 
 You can then use `composed.model(x)` to embed input
@@ -77,4 +77,20 @@ gmp = tf.keras.layers.GlobalMaxPool1D()
 # add a classification head on top
 d = tf.keras.layers.Dense(1, activation="sigmoid")
 keras_model = tf.keras.Model(composed.model.input, d(gmp(composed.model.output)))
+```
+
+### Shelf
+
+The `Shelf` class is used to load off-the-shelf components. These are published to a separate repo using git lfs, and are loaded with a specific tag.
+
+```python
+from cclm.shelf import Shelf
+
+shelf = Shelf()
+identifier = "en_wiki_clm_1"
+item_type = "preprocessor"
+shelf.fetch(identifier, item_type, tag="v0.2.1", cache_dir=".cclm")
+prep = Preprocessor(
+    load_from=os.path.join(cache_dir, identifier, item_type, "cclm_config.json")
+)
 ```

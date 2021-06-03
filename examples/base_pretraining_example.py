@@ -5,7 +5,7 @@ from cclm.pretrainers.cl_mask_pretrainer import (
     CLMaskPretrainerEvaluationCallback,
 )
 from cclm.preprocessing import Preprocessor
-from cclm.models import CCLMModelBase
+from cclm.models import Embedder
 from cclm.augmentation import Augmentor
 from datasets import load_dataset
 import tensorflow as tf
@@ -15,7 +15,7 @@ import mlflow
 mlflow.set_tracking_uri("sqlite:///tracking.db")
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--load", help="path to load weights from")
+ap.add_argument("--load", help="path to load weights from", default=None)
 ap.add_argument(
     "--min-char",
     help="minimum number of times a character needs to appear to be part of the preprocessor",
@@ -62,12 +62,10 @@ else:
 
 mlflow.log_metric("n_chars", len(prep.char_rev))
 # initialize the base and possibly load its embedder
-base = CCLMModelBase(prep.max_example_len, prep.n_chars)
-if args.load:
-    base.embedder = tf.keras.models.load_model(os.path.join(args.load, "embedder"))
+base = Embedder(prep.max_example_len, prep.n_chars, load_from=args.load)
 
 # initialize the pretrainer and optionally load an already trained model
-bp = CLMaskPretrainer(base=base, augmentor=augmentor, preprocessor=prep)
+bp = CLMaskPretrainer(embedder=base, augmentor=augmentor, preprocessor=prep)
 if args.load:
     bp.model = tf.keras.models.load_model(os.path.join(args.load, "model"))
 
@@ -88,5 +86,5 @@ print(bp.evaluate_prediction(x, bp.model.predict(x), prep))
 
 os.makedirs(artifact_path, exist_ok=True)
 prep.save(artifact_path)
-base.embedder.save(os.path.join(artifact_path, "embedder"))
+base.save(artifact_path)
 bp.model.save(os.path.join(artifact_path, "model"))
