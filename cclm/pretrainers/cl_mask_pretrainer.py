@@ -3,12 +3,12 @@ import json
 from cclm.preprocessing import Preprocessor
 from tensorflow.python.autograph.pyct import transformer
 from .core import Pretrainer
-from ..models import TransformerBlock, PositionEmbedding
+from ..models import Embedder, TransformerBlock, PositionEmbedding
 from ..augmentation import Augmentor
 import tensorflow as tf
 import numpy as np
 from datasets.arrow_dataset import Dataset
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Dict, Any
 
 
 class CLMaskPretrainer(Pretrainer):
@@ -26,10 +26,11 @@ class CLMaskPretrainer(Pretrainer):
 
     def __init__(
         self,
-        base=None,
+        embedder: Optional[Embedder] = None,
+        preprocessor: Optional[Preprocessor] = None,
         task_name="pretraining",
         load_from: str = None,
-        base_args={},
+        embedder_args: Dict[str, Any] = {},
         augmentor: Optional[Augmentor] = None,
         character_mask_rate: float = 0.125,
         consecutive_mask_len: int = 5,
@@ -52,11 +53,13 @@ class CLMaskPretrainer(Pretrainer):
         self.n_transformer_layers = n_transformer_layers
         self.n_transformer_heads = n_transformer_heads
         self.ff_dim = ff_dim
+
         super().__init__(
-            base=base,
+            embedder=embedder,
+            preprocessor=preprocessor,
             task_name=task_name,
             load_from=load_from,
-            base_args=base_args,
+            embedder_args=embedder_args,
             **kwargs,
         )
 
@@ -64,7 +67,7 @@ class CLMaskPretrainer(Pretrainer):
         """
         Transformer layers on top of the base
         """
-        emb_out_shape = self.base.embedder.outputs[0].shape[-1]
+        emb_out_shape = self.embedder.model.outputs[0].shape[-1]
         transformer_layers = [
             TransformerBlock(
                 emb_out_shape,
@@ -73,11 +76,11 @@ class CLMaskPretrainer(Pretrainer):
             )
             for _ in range(self.n_transformer_layers)
         ]
-        n_characters = self.base.n_chars + 1
-        inp = self.base.embedder.input
-        x = self.base.embedder.output
+        n_characters = self.preprocessor.n_chars + 1
+        inp = self.embedder.model.input
+        x = self.embedder.model.output
 
-        x = PositionEmbedding(self.base.max_example_len, emb_out_shape)(x)
+        x = PositionEmbedding(self.preprocessor.max_example_len, emb_out_shape)(x)
         for layer in transformer_layers:
             x = layer(x)
         dense = tf.keras.layers.Dense(

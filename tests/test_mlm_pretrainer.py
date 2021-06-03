@@ -1,7 +1,7 @@
 import pytest
 from cclm.pretrainers import MaskedLanguagePretrainer
 from cclm.preprocessing import Preprocessor
-from cclm.models import CCLMModelBase
+from cclm.models import Embedder
 import numpy as np
 import tensorflow as tf
 
@@ -19,28 +19,12 @@ CORPUS = [
 ]
 
 
-# def test_generator():
-#     prep = MLMPreprocessor(max_example_len=10)
-#     prep.fit(CORPUS)
-#     base = CCLMModelBase(prep.max_example_len, prep.n_chars)
-#     mlp = MaskedLanguagePretrainer(
-#         base=base,
-#     )
-#     gen = mlp.generator(CORPUS, batch_size=2)
-#     x, y = next(gen)
-#     print(x)
-#     for thing in x:
-#         print(thing.shape)
-#     print(y)
-#     assert False
-
-
 def test_fit():
     prep = Preprocessor(max_example_len=10)
     prep.fit(CORPUS)
-    base = CCLMModelBase(prep.max_example_len, prep.n_chars)
+    emb = Embedder(prep.max_example_len, prep.n_chars)
     mlp = MaskedLanguagePretrainer(
-        base=base,
+        embedder=emb,
         preprocessor=prep,
         stride_len=1,
         downsample_factor=1,
@@ -66,9 +50,9 @@ def test_get_substr_short():
 
     prep = Preprocessor(max_example_len=10)
     prep.fit(CORPUS)
-    base = CCLMModelBase(prep.max_example_len, prep.n_chars)
+    emb = Embedder(prep.max_example_len, prep.n_chars)
     mlp = MaskedLanguagePretrainer(
-        base=base,
+        embedder=emb,
         preprocessor=prep,
     )
     assert (
@@ -81,8 +65,8 @@ def test_get_substr_long():
     set_seed()
     prep = Preprocessor(max_example_len=10)
     prep.fit(CORPUS)
-    base = CCLMModelBase(prep.max_example_len, prep.n_chars)
-    mlp = MaskedLanguagePretrainer(base=base, preprocessor=prep)
+    emb = Embedder(prep.max_example_len, prep.n_chars)
+    mlp = MaskedLanguagePretrainer(embedder=emb, preprocessor=prep)
     assert mlp.get_substr(test_str) == "hello i am"
 
 
@@ -91,9 +75,9 @@ def test_batch_from_strs():
 
     prep = Preprocessor(max_example_len=16)
     prep.fit(CORPUS)
-    base = CCLMModelBase(prep.max_example_len, prep.n_chars)
+    emb = Embedder(prep.max_example_len, prep.n_chars)
     mlp = MaskedLanguagePretrainer(
-        base=base,
+        embedder=emb,
         preprocessor=prep,
     )
     inps, spans, outs = mlp.batch_from_strs(CORPUS)

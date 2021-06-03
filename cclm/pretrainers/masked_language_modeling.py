@@ -110,7 +110,9 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
                 tf.keras.layers.Dropout(0.2),
                 *conv_layers,
                 tf.keras.layers.Dropout(0.2),
-                PositionEmbedding(self.base.max_example_len, self.n_conv_filters),
+                PositionEmbedding(
+                    self.preprocessor.max_example_len, self.n_conv_filters
+                ),
                 *transformer_layers,
                 *[
                     tf.keras.layers.UpSampling1D(size=self.downsample_factor)
@@ -268,7 +270,7 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
             predictions = self([x_char, x_token, mask], training=True)
             loss = self.compiled_loss(y, predictions)
             to_diff = (
-                self.model.trainable_weights + self.base.embedder.trainable_weights
+                self.model.trainable_weights + self.embedder.model.trainable_weights
                 if self.train_base
                 else []
                 + [
@@ -287,7 +289,7 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
         """
         Embed the text and possibly pool the whole thing or pool just the masked token
         """
-        rep = self.model(self.base.embedder(x, training=training), training=training)
+        rep = self.model(self.embedder.model(x, training=training), training=training)
         # either pool the whole representation
         if self.training_pool_mode == "global":
             rep = self.pool(rep)
@@ -347,7 +349,7 @@ class MaskedLanguagePretrainer(tf.keras.Model, Pretrainer):
         inp_token = tf.keras.layers.Input((1 + self.num_negatives,))
         inp_mask = tf.keras.layers.Input((None,))
 
-        rep = self.base.embedder(inp_char)
+        rep = self.embedder.model(inp_char)
         rep = self.model(rep)
         mul = self.pool(tf.keras.layers.Multiply()([rep, inp_mask]))
         mul = tf.keras.layers.Reshape((1, self.n_conv_filters))(mul)

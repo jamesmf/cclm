@@ -2,10 +2,15 @@
 
 ## [Unreleased]
 ### Added
-- Shelf implementation and tests
+- `Shelf` implementation and tests
+- `Embedder` class
+
+### Changed
+- Moved CCLMModelBase to Embedder (breaking change)
 
 ### Removed
 - `setup.py`
+- Removed all uses of `CCLMModelBase`
 
 ## [0.1.1] - 2021-05-07
 ### Changed

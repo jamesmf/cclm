@@ -1,9 +1,10 @@
+from os import PRIO_PGRP
 import pytest
 from cclm.pretrainers.cl_mask_pretrainer import (
     CLMaskPretrainer,
 )
 from cclm.preprocessing import Preprocessor
-from cclm.models import CCLMModelBase
+from cclm.models import Embedder
 import numpy as np
 import tensorflow as tf
 
@@ -20,14 +21,14 @@ CORPUS = [
     "vocabulary and in order for ther eto be enough sampled values for the tensorflow log uniform candidate sampler",
 ]
 
-BASE_ARGS = {"max_example_len": 10, "n_chars": 20}
+PREP_ARGS = {"max_example_len": 10}
 
 
 def test_clmaskpretrainer_init():
     prep = Preprocessor(max_example_len=10)
     prep.fit(CORPUS)
-    base = CCLMModelBase(prep.max_example_len, prep.n_chars)
-    pretrainer = CLMaskPretrainer(base, preprocessor=prep)
+    emb = Embedder(max_len=prep.max_example_len, n_chars=prep.n_chars)
+    pretrainer = CLMaskPretrainer(emb, preprocessor=prep)
 
     assert True, "error initializing a CLMaskPretrainer"
 
@@ -35,11 +36,11 @@ def test_clmaskpretrainer_init():
 def test_clmaskpretrainer_fit():
     prep = Preprocessor(max_example_len=10)
     prep.fit(CORPUS)
-    base = CCLMModelBase(prep.max_example_len, prep.n_chars)
-    pretrainer = CLMaskPretrainer(base, preprocessor=prep)
+    emb = Embedder(prep.max_example_len, prep.n_chars, n_blocks=2)
+    pretrainer = CLMaskPretrainer(emb, preprocessor=prep, n_transformer_layers=1)
     gen = pretrainer.generator(CORPUS)
     x, y = next(gen)
-    print(base.embedder.predict(x))
+    print(emb.model.predict(x))
     print(pretrainer.model.predict(x))
     pretrainer.model.compile("adam", tf.keras.losses.SparseCategoricalCrossentropy())
     print(pretrainer.model.summary())
@@ -53,11 +54,13 @@ def test_clmaskpretrainer_fit():
 def test_clmask_loading(tmp_path):
     sub = tmp_path / "clmask_load_test"
     sub.mkdir()
-    cmp = CLMaskPretrainer(base_args=BASE_ARGS)
+    prep = Preprocessor(**PREP_ARGS)
+    prep.fit(CORPUS)
+    cmp = CLMaskPretrainer(preprocessor=prep)
     cmp.save(sub)
-    cmp2 = CLMaskPretrainer(base_args=BASE_ARGS)
+    cmp2 = CLMaskPretrainer(preprocessor=prep)
     cmp2.load(sub)
-    cmp3 = CLMaskPretrainer(base_args=BASE_ARGS, load_from=sub)
+    cmp3 = CLMaskPretrainer(preprocessor=prep, load_from=sub)
     w1 = cmp.model.get_weights()[0]
     w2 = cmp2.model.get_weights()[0]
     w3 = cmp3.model.get_weights()[0]
