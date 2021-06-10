@@ -7,6 +7,7 @@
 
 ### Changed
 - Moved CCLMModelBase to Embedder (breaking change)
+- `Preprocessor.string_to_array` makes `length` optional
 
 ### Removed
 - `setup.py`
