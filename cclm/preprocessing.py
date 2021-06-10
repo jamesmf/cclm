@@ -11,7 +11,7 @@ import json
 import os
 import re
 from collections import Counter
-from typing import Dict, List, Iterable
+from typing import Dict, List, Iterable, Optional
 
 PUNCT = "~!@#$%^&*()-+=_.,?\":;'"
 
@@ -23,9 +23,7 @@ class Preprocessor:
         vocab_size: int = 10000,
         max_example_len: int = 128,
         batch_size: int = 16,
-        num_stopwords: int = 250,
-        mask_output_len: int = 4,
-        mask_token_ind: int = 1,
+        downsample_factor: int = 1,
     ):
         self.char_dict: Dict[str, int] = {}
         self.char_rev: Dict[int, str] = {}
@@ -34,15 +32,18 @@ class Preprocessor:
         self.vocab_size = vocab_size
         self.max_example_len = max_example_len
         self.batch_size = batch_size
-        self.num_stopwords = num_stopwords
-        self.mask_output_len = mask_output_len
-        self.mask_token_ind = mask_token_ind
+        # some default values
+        self.mask_token_ind = 1
+        self.unk_token_ind = 2
+        self.cls_token_ind = 3
+
+        self.downsample_factor = downsample_factor
         self.tokenizer_is_fit = False
         self.tokenizer = Tokenizer(BPE(unk_token="[UNK]"))
         self.tokenizer.pre_tokenizer = Whitespace()
         self.tokenizer.normalizer = Sequence([NFD(), Lowercase(), StripAccents()])
         self.tok_trainer = BpeTrainer(
-            special_tokens=["[UNK]", "[MASK]"], vocab_size=self.vocab_size
+            special_tokens=["[UNK]", "[MASK]", "[CLS]"], vocab_size=self.vocab_size
         )
         if load_from:
             self._load(load_from)
@@ -81,7 +82,13 @@ class Preprocessor:
                     char_counter[char] = char_count
 
         counts = [k for k, v in char_counter.items() if v >= min_char_count]
-        self.char_rev = {0: "", 1: "?", 2: "?", 3: ""}
+
+        self.char_rev = {
+            0: "",
+            self.mask_token_ind: "_",
+            self.cls_token_ind: "[CLS]",
+            self.unk_token_ind: "",
+        }
 
         for c in sorted(counts):
             n = len(self.char_rev)
@@ -92,7 +99,11 @@ class Preprocessor:
         string_to_tokenize = string_to_tokenize
         return self.tokenizer.encode(string_to_tokenize)
 
-    def string_to_array(self, string_in: str, length: int, padding_pre: bool = False):
+    def string_to_array(
+        self, string_in: str, length: Optional[int] = None, padding_pre: bool = False
+    ):
+        if length is None:
+            length = self.infer_length(string_in)
         # truncate
         if padding_pre:
             s = string_in[-length:]
@@ -111,6 +122,13 @@ class Preprocessor:
         else:
             r = np.pad(mapped, (0, length - len(s)), "constant", constant_values=(0, 0))
         return r
+
+    def infer_length(self, inp: str) -> int:
+        l = len(inp)
+        mod = l % self.downsample_factor
+        if mod > 0:
+            l += self.downsample_factor - mod
+        return l
 
     def save(self, path: str):
         """
