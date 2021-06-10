@@ -44,3 +44,25 @@ def test_default_tokenizer_behavior(tmp_path):
     assert (
         "string" in p.tokenizer.get_vocab()
     ), "fit tokenizer does not have expected tokens"
+
+
+def test_preprocessor_downsample_when_too_short(tmp_path):
+    p = Preprocessor(downsample_factor=4)
+    p.fit(CORPUS)
+    # a string that is not long enough
+    s = "hi"
+    t = p.string_to_array(s)
+    assert (
+        t.shape[0] == 4
+    ), "Preprocessor created a sequence too short when processing a string less then downsample_factor"
+
+
+def test_preprocessor_downsample_default(tmp_path):
+    p = Preprocessor(downsample_factor=4)
+    p.fit(CORPUS)
+    # a string that is not long enough
+    s = "i am 6"
+    t = p.string_to_array(s)
+    assert (
+        t.shape[0] == 8
+    ), "Preprocessor(downsample_factor=4) should pad a string of len(6) to sequence length 8"
