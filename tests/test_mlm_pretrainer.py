@@ -88,4 +88,4 @@ def test_batch_from_strs():
     assert spans[0][0] == 9, "unexpected token start index"
     assert spans[0][1] == 13, "unexpected token end index"
     assert spans[0][2] == "test", "unexpected masked value"
-    assert outs[0] == 36, "unexpected return index"
+    assert outs[0] == 37, "unexpected return index"
