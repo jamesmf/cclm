@@ -27,7 +27,7 @@ ap.add_argument(
     "--lr",
     help="learning rate",
     dest="lr",
-    default=0.00005,
+    default=3e-5,
     type=float,
 )
 ap.add_argument(
@@ -45,9 +45,9 @@ artifact_path = run_info["artifact_uri"]
 run_id = run_info["run_id"]
 
 
-dataset = load_dataset("wikipedia", "20200501.en", cache_dir="/app/cclm/.datasets")[
-    "train"
-]
+dataset = load_dataset(
+    "wikipedia", "20200501.en", cache_dir="/app/cclm/.datasets"
+).shuffle()["train"]
 
 augmentor = Augmentor()
 
