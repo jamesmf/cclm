@@ -92,8 +92,8 @@ def test_preprocessor_cls_and_downsample():
     s = "a"
     arr = p.string_to_array(s)
     assert (
-        arr[1] == p.cls_token_ind
-    ), "expected [CLS] token ind to be added directly after the sequence when downsample_factor > len(string)"
+        arr[-1] == p.cls_token_ind
+    ), "expected [CLS] token ind to be added to the end of the sequence when downsample_factor > len(string)"
     assert arr[2] == 0, "zero-padding not as expected when add_cls == True"
 
 
