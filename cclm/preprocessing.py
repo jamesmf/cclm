@@ -21,19 +21,28 @@ class Preprocessor:
         self,
         load_from: str = None,
         vocab_size: int = 10000,
-        max_example_len: int = 128,
-        batch_size: int = 16,
+        max_example_len: int = 512,
         downsample_factor: int = 1,
         add_cls: bool = True,
     ):
+        """A Preprocessor is responsible for storing the map between
+        characters and integers for embedding. It vectorizes text
+        using that map
+
+        Args:
+            load_from (str, optional): path from which to load Preprocessor. Defaults to None.
+            vocab_size (int, optional): maximum number of characters in vocabulary. Defaults to 10000.
+            max_example_len (int, optional): maximum length of an input. Defaults to 512.
+            downsample_factor (int, optional): factor to ensure downsampling works; will pad/truncate to ensure `len(vector) % self.downsample_len == 0`. Defaults to 1.
+            add_cls (bool, optional): whether or not to add a [CLS] token to the end of vectors. Defaults to True.
+        """
         self.char_dict: Dict[str, int] = {}
         self.char_rev: Dict[int, str] = {}
         self.token_dict: Dict[str, int] = {}
         self.token_rev: Dict[str, int] = {}
         self.vocab_size = vocab_size
         self.max_example_len = max_example_len
-        self.batch_size = batch_size
-        self.add_cls = True
+        self.add_cls = add_cls
         # some default values
         self.mask_token_ind = 1
         self.unk_token_ind = 2
@@ -139,7 +148,7 @@ class Preprocessor:
 
         # if we're adding the CLS token,
         if self.add_cls:
-            mapped[n + 1] = self.cls_token_ind
+            mapped[-1] = self.cls_token_ind
 
         return mapped
 
