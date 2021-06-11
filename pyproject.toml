@@ -10,13 +10,14 @@ keywords = ["nlp", "modular", "embedding", "composable"]
 readme = "readme.md"
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.6"
 tensorflow = "^2.0.0"
 datasets = "^1.1.3"
 tqdm = "^4.0.0"
 tokenizers = "^0.10.0"
 mlflow = "^1.16.0"
 requests = "^2.25.1"
+importlib-metadata = {version = "^1.6.0", python = "<3.8"}
 
 [[tool.poetry.source]]
 name = "test-pypi"
