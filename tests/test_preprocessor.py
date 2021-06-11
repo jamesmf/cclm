@@ -1,4 +1,5 @@
 import pytest
+import numpy as np
 from cclm.preprocessing import Preprocessor
 
 CORPUS = [
@@ -8,6 +9,10 @@ CORPUS = [
     "here is another for us to test the",
     "vocabulary and in order for ther eto be enough sampled values for the tensorflow log uniform candidate sampler",
 ]
+
+
+def reverse(prep: Preprocessor, x: np.ndarray):
+    return "".join(prep.char_rev[i] for i in x)
 
 
 def test_prep_encode_string():
@@ -66,3 +71,69 @@ def test_preprocessor_downsample_default(tmp_path):
     assert (
         t.shape[0] == 8
     ), "Preprocessor(downsample_factor=4) should pad a string of len(6) to sequence length 8"
+
+
+def test_preprocessor_cls():
+    p = Preprocessor(add_cls=True)
+    p.fit(CORPUS)
+    # a string that is not long enough
+    s = "a short string"
+    arr = p.string_to_array(s)
+    reversed = reverse(p, arr)
+    assert (
+        reversed == "a short string[CLS]"
+    ), "expected [CLS] token to be added when add_cls=True on Preprocessor"
+
+
+def test_preprocessor_cls_and_downsample():
+    p = Preprocessor(add_cls=True, downsample_factor=16)
+    p.fit(CORPUS)
+    # a string that is not long enough, we should expect [CLS] in arr[1]
+    s = "a"
+    arr = p.string_to_array(s)
+    assert (
+        arr[1] == p.cls_token_ind
+    ), "expected [CLS] token ind to be added directly after the sequence when downsample_factor > len(string)"
+    assert arr[2] == 0, "zero-padding not as expected when add_cls == True"
+
+
+def test_preprocessor_cls_long_string_no_specific_length():
+    p = Preprocessor(add_cls=True)
+    p.fit(CORPUS)
+    # a string that exactly the max_example_len
+    s = "char"
+    arr = p.string_to_array(s)
+    reversed = reverse(p, arr)
+    assert (
+        arr[-1] == p.cls_token_ind
+    ), "expected [CLS] token ind to be added in the last index"
+    assert (
+        reversed == "char[CLS]"
+    ), "expected [CLS] token ind to be added in the last index"
+
+
+def test_preprocessor_cls_long_string_specific_length():
+    p = Preprocessor(add_cls=True)
+    p.fit(CORPUS)
+    # a string that exactly the max_example_len
+    s = "char"
+    arr = p.string_to_array(s, length=4)
+    reversed = reverse(p, arr)
+    assert (
+        arr[-1] == p.cls_token_ind
+    ), "expected [CLS] token ind to be added in the last index"
+    assert (
+        reversed == "cha[CLS]"
+    ), "expected [CLS] token ind to be added in the last index"
+
+
+def test_preprocessor_cls_long_string_downsample():
+    p = Preprocessor(add_cls=True, max_example_len=5, downsample_factor=4)
+    p.fit(CORPUS)
+    # a string that exactly the max_example_len
+    s = "char"
+    arr = p.string_to_array(s)
+    reversed = reverse(p, arr)
+    assert (
+        reversed == "cha[CLS]"
+    ), "expected [CLS] token ind to be added in the last index"
