@@ -24,6 +24,7 @@ class Preprocessor:
         max_example_len: int = 128,
         batch_size: int = 16,
         downsample_factor: int = 1,
+        add_cls: bool = True,
     ):
         self.char_dict: Dict[str, int] = {}
         self.char_rev: Dict[int, str] = {}
@@ -32,6 +33,7 @@ class Preprocessor:
         self.vocab_size = vocab_size
         self.max_example_len = max_example_len
         self.batch_size = batch_size
+        self.add_cls = True
         # some default values
         self.mask_token_ind = 1
         self.unk_token_ind = 2
@@ -100,31 +102,64 @@ class Preprocessor:
         return self.tokenizer.encode(string_to_tokenize)
 
     def string_to_array(
-        self, string_in: str, length: Optional[int] = None, padding_pre: bool = False
+        self, string_in: str, length: Optional[int] = None, use_max_len: bool = True
     ):
+        """Turn a string into an array[int]. If length specified, will
+        truncate to that length. Otherwise, the function will infer
+        the proper length. If the Preprocessor has .add_cls == True,
+        then it will also add an int to the end representing [CLS]
+
+        Args:
+            string_in (str): string to vectorize
+            length (Optional[int], optional): specific length of the output. Defaults to None.
+            use_max_len (bool): whether to enforce a Preprocessor.max_example_len as maximum
+
+        Returns:
+            [type]: [description]
+        """
+        len_str = len(string_in)
+        specific_length = True
+        clip_char = False
         if length is None:
-            length = self.infer_length(string_in)
+            specific_length = False
+            length = self.infer_length(string_in, use_max_len)
+
+        # we may need to clip an extra character to make room for [CLS]
+        if self.add_cls and (len_str + 1 * self.add_cls) >= (length):
+            clip_char = True
         # truncate
-        if padding_pre:
-            s = string_in[-length:]
-        else:
-            s = string_in[:length]
+        s = string_in[: (length - 1 * clip_char)]
         # map char -> int and left-zero-pad
-        mapped = np.ones((len(s)))
+        mapped = np.zeros((length))
         for n, char in enumerate(s):
             try:
                 mapped[n] = self.char_dict[char]
             except KeyError:
                 pass
-        # mapped = [self.char_dict.get(x, 1) for x in s]
-        if padding_pre:
-            r = np.pad(mapped, (length - len(s), 0), "constant", constant_values=(0, 0))
-        else:
-            r = np.pad(mapped, (0, length - len(s)), "constant", constant_values=(0, 0))
-        return r
 
-    def infer_length(self, inp: str) -> int:
-        l = len(inp)
+        # if we're adding the CLS token,
+        if self.add_cls:
+            mapped[n + 1] = self.cls_token_ind
+
+        return mapped
+
+    def infer_length(self, inp: str, use_max_len=True) -> int:
+        """infer the length for string_to_array. If use_max_len, honor the maximum length
+        from self.max_example_len. Otherwise, just take into account the necessary
+        downsample_factor and add_cls
+
+        Args:
+            inp (str): input string
+            use_max_len (bool, optional): Whether to honor self.max_example_len. Defaults to True.
+
+        Returns:
+            int: [description]
+        """
+        l = len(inp) + 1 * self.add_cls
+        # possibly enforce max len, possibly truncate to a multiple of downsample_factor
+        if use_max_len and l >= self.max_example_len:
+            return l - (l % self.downsample_factor)
+        # otherwise just enforce downsample_factor
         mod = l % self.downsample_factor
         if mod > 0:
             l += self.downsample_factor - mod
