@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.0.3-runtime-ubuntu18.04
+FROM nvidia/cuda:11.0.3-cudnn8-runtime-ubuntu18.04
 
 RUN apt-get update && \
     apt-get install -y git wget curl zip
