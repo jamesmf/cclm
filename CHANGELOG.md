@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.2] - 2021-06-30
 ### Added
 - `Shelf` implementation and tests
 - `Embedder` class
@@ -8,6 +8,7 @@
 ### Changed
 - Moved CCLMModelBase to Embedder (breaking change)
 - `Preprocessor.string_to_array` makes `length` optional
+- Updated docker image tf version
 
 ### Removed
 - `setup.py`
