@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- ability to filter examples out during training of `CLMaskPretrainer`
+- ability to transform examples during training of `CLMaskPretrainer`
+
 ## [0.1.2] - 2021-06-30
 ### Added
 - `Shelf` implementation and tests

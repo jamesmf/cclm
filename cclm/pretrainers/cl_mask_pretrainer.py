@@ -8,7 +8,7 @@ from ..augmentation import Augmentor
 import tensorflow as tf
 import numpy as np
 from datasets.arrow_dataset import Dataset
-from typing import List, Union, Optional, Dict, Any
+from typing import List, Union, Optional, Dict, Any, Callable
 
 
 class CLMaskPretrainer(Pretrainer):
@@ -37,6 +37,8 @@ class CLMaskPretrainer(Pretrainer):
         n_transformer_layers: int = 3,
         n_transformer_heads: int = 8,
         ff_dim: int = 128,
+        filters: List[Callable[[str], bool]] = [],
+        transforms: List[Callable[[str], str]] = [],
         **kwargs,
     ):
         self.save_attr = [
@@ -53,6 +55,8 @@ class CLMaskPretrainer(Pretrainer):
         self.n_transformer_layers = n_transformer_layers
         self.n_transformer_heads = n_transformer_heads
         self.ff_dim = ff_dim
+        self.filters = filters
+        self.transforms = transforms
 
         super().__init__(
             embedder=embedder,
@@ -108,8 +112,26 @@ class CLMaskPretrainer(Pretrainer):
             for n, example in enumerate(data):
                 if is_dataset:
                     example = example["text"]
+                # apply transforms to example
+                for transform in self.transforms:
+                    example = transform(example)
+
+                # skip example if not long enough
                 if len(example) < self.preprocessor.max_example_len:
+                    if n + 1 == len(data):
+                        yield np.array(x), np.array(y)
                     continue
+                # skip example if it meets a filter criterion
+                filter_example = False
+                for callable_filter in self.filters:
+                    if callable_filter(example):
+                        filter_example = True
+                        break
+                if filter_example:
+                    if n + 1 == len(data):
+                        yield np.array(x), np.array(y)
+                    continue
+
                 substr = self.get_substr(example)
                 y_str = self.preprocessor.string_to_array(
                     substr, self.preprocessor.max_example_len
