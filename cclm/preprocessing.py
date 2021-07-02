@@ -198,5 +198,5 @@ class Preprocessor:
             self.char_rev[int(key)] = value
 
     @property
-    def n_chars(self):
-        return np.max(list(self.char_dict.values())) + 1
+    def n_chars(self) -> int:
+        return int(np.max(list(self.char_dict.values())) + 1)
