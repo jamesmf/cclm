@@ -1,4 +1,5 @@
 from os import PRIO_PGRP
+from numpy.core.numeric import extend_all
 import pytest
 from cclm.pretrainers.cl_mask_pretrainer import (
     CLMaskPretrainer,
@@ -86,3 +87,31 @@ def test_clmask_pretrainer_filter(cml):
     x, y = next(gen)
     print(x.shape)
     assert x.shape[0] == len(CORPUS) - 1, "filter not applied in CLMaskPretrainer.fit()"
+
+
+def test_clmask_pretrainer_transforms(cml):
+    # transform function that converts everything into the same string
+    example_str = "s" * MAX_LEN
+    cml.transforms = [lambda x: example_str]
+
+    # disable the random masking
+    a, b = cml.character_mask_rate, cml.consecutive_mask_len
+    cml.character_mask_rate = 0
+    cml.consecutive_mask_len = 0
+
+    # test that the transform function is being applied
+    gen = cml.generator(CORPUS)
+    set_seed()
+    x, y = next(gen)
+    gen2 = cml.generator([example_str] * len(CORPUS))
+    set_seed()
+    x2, y2 = next(gen2)
+    print(x)
+    print(x2)
+
+    # reset the cml object
+    cml.character_mask_rate = a
+    cml.consecutive_mask_len = b
+    assert np.allclose(
+        x, x2
+    ), "transforms not applied properly in CLMaskPretrainer.generator()"
