@@ -21,26 +21,26 @@ CORPUS = [
     "vocabulary and in order for ther eto be enough sampled values for the tensorflow log uniform candidate sampler",
 ]
 
-PREP_ARGS = {"max_example_len": 10}
+MAX_LEN = 10
+PREP_ARGS = {"max_example_len": MAX_LEN}
+CLM_ARGS = {"n_transformer_layers": 3, "n_transformer_heads": 2, "ff_dim": 4}
+EMB_ARGS = {"max_len": MAX_LEN}
 
 
-def test_clmaskpretrainer_init():
-    prep = Preprocessor(max_example_len=10)
+@pytest.fixture(scope="module")
+def cml():
+    prep = Preprocessor(**PREP_ARGS)
     prep.fit(CORPUS)
-    emb = Embedder(max_len=prep.max_example_len, n_chars=prep.n_chars)
-    pretrainer = CLMaskPretrainer(emb, preprocessor=prep)
+    emb = Embedder(**EMB_ARGS, n_chars=prep.n_chars)
+    pretrainer = CLMaskPretrainer(emb, preprocessor=prep, **CLM_ARGS)
+    return pretrainer
 
-    assert True, "error initializing a CLMaskPretrainer"
 
-
-def test_clmaskpretrainer_fit():
-    prep = Preprocessor(max_example_len=10)
-    prep.fit(CORPUS)
-    emb = Embedder(prep.max_example_len, prep.n_chars, n_blocks=2)
-    pretrainer = CLMaskPretrainer(emb, preprocessor=prep, n_transformer_layers=1)
+def test_clmaskpretrainer_fit(cml):
+    prep = cml.preprocessor
+    pretrainer = cml
     gen = pretrainer.generator(CORPUS)
     x, y = next(gen)
-    print(emb.model.predict(x))
     print(pretrainer.model.predict(x))
     pretrainer.model.compile("adam", tf.keras.losses.SparseCategoricalCrossentropy())
     print(pretrainer.model.summary())
@@ -51,16 +51,18 @@ def test_clmaskpretrainer_fit():
     assert True, "error fitting CLMaskPretrainer"
 
 
-def test_clmask_loading(tmp_path):
+def test_clmask_loading(tmp_path, cml):
     sub = tmp_path / "clmask_load_test"
     sub.mkdir()
-    prep = Preprocessor(**PREP_ARGS)
-    prep.fit(CORPUS)
-    cmp = CLMaskPretrainer(preprocessor=prep)
+    prep = cml.preprocessor
+    cmp = cml
     cmp.save(sub)
-    cmp2 = CLMaskPretrainer(preprocessor=prep)
+    emb_args = dict(max_len=prep.max_example_len, n_chars=prep.n_chars)
+    cmp2 = CLMaskPretrainer(preprocessor=prep, embedder_args=emb_args, **CLM_ARGS)
     cmp2.load(sub)
-    cmp3 = CLMaskPretrainer(preprocessor=prep, load_from=sub)
+    cmp3 = CLMaskPretrainer(
+        preprocessor=prep, load_from=sub, embedder_args=emb_args, **CLM_ARGS
+    )
     w1 = cmp.model.get_weights()[0]
     w2 = cmp2.model.get_weights()[0]
     w3 = cmp3.model.get_weights()[0]
@@ -76,3 +78,11 @@ def test_clmask_loading(tmp_path):
         att3 = getattr(cmp2, attr)
         assert att1 == att2, f"failed to set attribute {attr} when using .load()"
         assert att1 == att3, f"failed to set attribute {attr} when using load_from="
+
+
+def test_clmask_pretrainer_filter(cml):
+    cml.filters = [lambda x: "vocab" in x]
+    gen = cml.generator(CORPUS)
+    x, y = next(gen)
+    print(x.shape)
+    assert x.shape[0] == len(CORPUS) - 1, "filter not applied in CLMaskPretrainer.fit()"

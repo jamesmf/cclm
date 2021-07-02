@@ -37,6 +37,13 @@ ap.add_argument(
     default=256,
     type=int,
 )
+ap.add_argument(
+    "--epochs",
+    help="number of epochs to train",
+    dest="epochs",
+    default=100,
+    type=int,
+)
 args = ap.parse_args()
 
 mlflow.log_params(vars(args))
@@ -80,7 +87,7 @@ callbacks = [
     CLMaskPretrainerEvaluationCallback(dataset, bp),
 ]
 
-bp.model.fit(gen, steps_per_epoch=5000, epochs=500, callbacks=callbacks)
+bp.model.fit(gen, steps_per_epoch=5000, epochs=args.epochs, callbacks=callbacks)
 x, y = next(gen)
 print(bp.evaluate_prediction(x, bp.model.predict(x), prep))
 
