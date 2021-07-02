@@ -12,6 +12,26 @@ import tensorflow as tf
 import argparse
 import mlflow
 
+
+def truncate_wiki(page: str) -> str:
+    """
+    Truncate a wiki page from the dataset at the first sign of a pattern
+    that signifies the rest of the article will have low information
+    content
+
+    Args:
+        page (str): text of the page
+
+    Returns:
+        str: possibly truncated test
+    """
+    headings = ["Category:", "\nReferences\n", "External links"]
+    for h in headings:
+        if h in page:
+            page = page.split(h)[0]
+    return page
+
+
 mlflow.set_tracking_uri("sqlite:///tracking.db")
 
 ap = argparse.ArgumentParser()
@@ -72,7 +92,9 @@ mlflow.log_metric("n_chars", len(prep.char_rev))
 base = Embedder(prep.max_example_len, prep.n_chars, load_from=args.load)
 
 # initialize the pretrainer and optionally load an already trained model
-bp = CLMaskPretrainer(embedder=base, augmentor=augmentor, preprocessor=prep)
+bp = CLMaskPretrainer(
+    embedder=base, augmentor=augmentor, preprocessor=prep, transforms=[truncate_wiki]
+)
 if args.load:
     bp.model = tf.keras.models.load_model(os.path.join(args.load, "model"))
 
